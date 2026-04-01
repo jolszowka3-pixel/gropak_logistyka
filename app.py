@@ -26,16 +26,12 @@ st.title("📦 Gropak: Optymalizacja Wysyłek Kurierskich")
 with st.sidebar:
     st.header("⚙️ Konfiguracja")
     
-    # Wybór Kuriera
     wybrany_kurier = st.selectbox("Wybierz przewoźnika:", list(KURIERZY_DATA.keys()))
     k_limits = KURIERZY_DATA[wybrany_kurier]
     
     st.divider()
     
-    # Wybór Kartonu
     wybrany_karton = st.selectbox("Wybierz standardowy karton:", list(STANDARDOWE_KARTONY.keys()))
-    
-    # Logika autouzupełniania
     default_vals = STANDARDOWE_KARTONY[wybrany_karton]
     
     st.subheader("Wymiary jednostkowe")
@@ -55,13 +51,11 @@ def rysuj_paczke(orig_dims, n_sztuk, axis_index, label, color):
 
     fig = go.Figure()
 
-    # Wierzchołki bryły
     v = np.array([
         [0,0,0], [L_f,0,0], [L_f,W_f,0], [0,W_f,0],
         [0,0,H_f], [L_f,0,H_f], [L_f,W_f,H_f], [0,W_f,H_f]
     ])
     
-    # Ściany
     i = [0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1]
     j = [1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5]
     k = [4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2]
@@ -72,7 +66,6 @@ def rysuj_paczke(orig_dims, n_sztuk, axis_index, label, color):
         opacity=0.3, color=color, showscale=False
     ))
 
-    # Linie podziału
     lines_x, lines_y, lines_z = [], [], []
     for s in range(1, n_sztuk):
         shift = s * orig_dims[axis_index]
@@ -112,8 +105,10 @@ def check_limits(d1, d2, d3, w_total, courier_name):
     lim = KURIERZY_DATA[courier_name]
     
     if courier_name == "InPost Paczkomat C":
-        return (d1 <= 64 and d2 <= 41 and d3 <= 38 and w_total <= 25), girth
+        # InPost ma sztywne wymiary skrytki, nie operuje obwodem (girth)
+        return (d1 <= 64 and d2 <= 41 and d3 <= 38 and w_total <= 25), 0
     
+    # Standardowi kurierzy (Obwód + Najdłuższy bok)
     return (l_max <= lim["max_L"] and girth <= lim["max_Girth"] and w_total <= lim["max_W"]), girth
 
 # --- LOGIKA GŁÓWNA ---
@@ -144,4 +139,25 @@ col1, col2 = st.columns([1, 2])
 with col1:
     st.subheader(f"Parametry {wybrany_kurier}")
     st.write(f"📏 Max długość: {k_limits['max_L']} cm")
+    
+    # Tutaj była pułapka wcięcia - poprawione:
     if "max_Girth" in k_limits:
+        st.write(f"🔄 Max obwód: {k_limits['max_Girth']} cm")
+        
+    st.write(f"⚖️ Max waga: {k_limits['max_W']} kg")
+    
+    st.divider()
+    
+    if results:
+        best = sorted(results, key=lambda x: x['Sztuk'], reverse=True)[0]
+        st.success(f"Możesz spiąć razem: **{best['Sztuk']} szt.**")
+        st.info(f"Instrukcja: {best['Układ']}")
+        st.write(f"Finalne wymiary: {best['Wymiary'][0]}x{best['Wymiary'][1]}x{best['Wymiary'][2]} cm")
+        st.write(f"Waga całkowita: {best['Waga']} kg")
+    else:
+        st.error("Brak możliwości połączenia w standardzie tego kuriera.")
+
+with col2:
+    if results:
+        fig = rysuj_paczke(orig_dims, best['Sztuk'], best['axis'], best['Układ'], k_limits['color'])
+        st.plotly_chart(fig, use_container_width=True)
