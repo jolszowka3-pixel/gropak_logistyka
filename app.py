@@ -2,119 +2,140 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- KOMPLEKSOWA BAZA KURIERÓW ---
-# max_L: najdłuższy bok, max_G: obwód (L + 2W + 2H), max_W: waga
+# --- KONFIGURACJA ---
 KURIERZY = {
     "DPD (Standard)": {"max_L": 175, "max_G": 300, "max_W": 31.5, "color": "#dc0032"},
     "DHL (Standard)": {"max_L": 120, "max_G": 300, "max_W": 31.5, "color": "#ffcc00"},
-    "InPost Paczkomat A": {"L": 64, "W": 38, "H": 8, "max_W": 25.0, "color": "#ffcc00"},
-    "InPost Paczkomat B": {"L": 64, "W": 38, "H": 19, "max_W": 25.0, "color": "#ffcc00"},
     "InPost Paczkomat C": {"L": 64, "W": 38, "H": 41, "max_W": 25.0, "color": "#ffcc00"},
     "InPost Kurier": {"max_L": 120, "max_G": 220, "max_W": 30.0, "color": "#ffcc00"},
-    "GLS (Polska)": {"max_L": 200, "max_G": 300, "max_W": 31.5, "color": "#003399"},
-    "UPS Standard": {"max_L": 274, "max_G": 400, "max_W": 32.0, "color": "#351c15"},
-    "FedEx Polska": {"max_L": 175, "max_G": 330, "max_W": 35.0, "color": "#4d148c"},
-    "Pocztex (Poczta Polska)": {"max_L": 150, "max_G": 300, "max_W": 30.0, "color": "#ee1d23"},
-    "Geis": {"max_L": 175, "max_G": 300, "max_W": 31.5, "color": "#004a99"},
-    "Meest": {"max_L": 150, "max_G": 300, "max_W": 30.0, "color": "#25b14b"},
-    "TNT (Express)": {"max_L": 240, "max_G": 400, "max_W": 30.0, "color": "#ff6600"}
+    "GLS": {"max_L": 200, "max_G": 300, "max_W": 31.5, "color": "#003399"},
+    "UPS Standard": {"max_L": 274, "max_G": 400, "max_W": 32.0, "color": "#351c15"}
 }
 
-PUDEŁKA_GROPAK = {
-    "Karton K1 (40x30x20)": {"L": 40, "W": 30, "H": 20, "Waga": 2.5},
-    "Karton K2 (60x40x30)": {"L": 60, "W": 40, "H": 30, "Waga": 6.0},
-    "Karton K3 (80x60x15)": {"L": 80, "W": 60, "H": 15, "Waga": 10.0},
-    "Karton Fasonowy (35x25x10)": {"L": 35, "W": 25, "H": 10, "Waga": 1.2},
-    "Własny wymiar...": {"L": 0, "W": 0, "H": 0, "Waga": 0.0}
+PRODUKTY_BAZA = {
+    "Karton K1 (40x30x20)": {"L": 40, "W": 30, "H": 20, "Waga": 2.5, "color": "blue"},
+    "Karton K2 (60x40x30)": {"L": 60, "W": 40, "H": 30, "Waga": 6.0, "color": "green"},
+    "Karton K3 (80x60x15)": {"L": 80, "W": 60, "H": 15, "Waga": 10.0, "color": "orange"},
+    "Fasonowe (35x25x10)": {"L": 35, "W": 25, "H": 10, "Waga": 1.2, "color": "purple"}
 }
 
-st.set_page_config(page_title="Gropak - MultiKurier", layout="wide")
-st.title("📦 Gropak: Optymalizator Blokowy (Pełna Lista Kurierów)")
+st.set_page_config(page_title="Gropak - Multi-Packing", layout="wide")
+st.title("📦 Gropak: System Pakowania Wieloproduktowego")
 
+# --- ZARZĄDZANIE KOSZYKIEM ---
+if 'koszyk' not in st.session_state:
+    st.session_state.koszyk = []
+
+def dodaj_do_koszyka(name, qty):
+    for _ in range(qty):
+        st.session_state.koszyk.append(PRODUKTY_BAZA[name])
+
+def wyczysc_koszyk():
+    st.session_state.koszyk = []
+
+# --- PANEL BOCZNY ---
 with st.sidebar:
-    st.header("1. Wybór towaru")
-    wybrane = st.selectbox("Typ pudełka:", list(PUDEŁKA_GROPAK.keys()))
-    if wybrane == "Własny wymiar...":
-        L = st.number_input("Dł (cm)", 1); W = st.number_input("Szer (cm)", 1)
-        H = st.number_input("Wys (cm)", 1); Waga = st.number_input("Waga (kg)", 0.1)
-    else:
-        p = PUDEŁKA_GROPAK[wybrane]; L, W, H, Waga = p["L"], p["W"], p["H"], p["Waga"]
+    st.header("🛒 Kompletowanie zamówienia")
+    wybrany_prod = st.selectbox("Produkt:", list(PRODUKTY_BAZA.keys()))
+    ilosc = st.number_input("Ilość:", 1, 20, 1)
     
+    if st.button("➕ Dodaj do wysyłki"):
+        dodaj_do_koszyka(wybrany_prod, ilosc)
+    
+    if st.button("🗑️ Wyczyść listę"):
+        wyczysc_koszyk()
+        st.rerun()
+
     st.divider()
-    st.header("2. Wybór przewoźnika")
-    kurier_name = st.selectbox("Kurier:", list(KURIERZY.keys()))
-    sztuk = st.number_input("Ilość sztuk do spięcia:", 1, 100, 4)
+    st.header("🚚 Przewoźnik")
+    kurier_name = st.selectbox("Wybierz kuriera:", list(KURIERZY.keys()))
+    k = KURIERZY[kurier_name]
 
-def rysuj_blok_3d(orig_dims, nx, ny, nz, color):
-    l, w, h = orig_dims
-    fL, fW, fH = l*nx, w*ny, h*nz
+# --- LOGIKA UKŁADANIA (PROSTY STACKING) ---
+# Program próbuje ułożyć pudełka jedno na drugim (największe na spodzie)
+def oblicz_paczke(elementy):
+    if not elementy: return None
+    
+    # Sortujemy od największej powierzchni podstawy
+    posortowane = sorted(elementy, key=lambda x: x['L']*x['W'], reverse=True)
+    
+    current_h = 0
+    max_l = 0
+    max_w = 0
+    total_weight = 0
+    
+    paczka_czesci = []
+    
+    for item in posortowane:
+        paczka_czesci.append({
+            'pos': (0, 0, current_h),
+            'dims': (item['L'], item['W'], item['H']),
+            'color': item['color']
+        })
+        max_l = max(max_l, item['L'])
+        max_w = max(max_w, item['W'])
+        current_h += item['H']
+        total_weight += item['Waga']
+        
+    dims_final = sorted([max_l, max_w, current_h], reverse=True)
+    girth = dims_final[0] + 2*dims_final[1] + 2*dims_final[2]
+    
+    return {
+        'czesci': paczka_czesci,
+        'final_dims': (max_l, max_w, current_h),
+        'total_w': total_weight,
+        'girth': girth
+    }
+
+# --- RYSOWANIE 3D ---
+def rysuj_paczke_multi(wynik):
     fig = go.Figure()
-
-    # Mesh3d dla bryły
-    fig.add_trace(go.Mesh3d(
-        x=[0, fL, fL, 0, 0, fL, fL, 0], y=[0, 0, fW, fW, 0, 0, fW, fW], z=[0, 0, 0, 0, fH, fH, fH, fH],
-        i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-        opacity=0.25, color=color
-    ))
-
-    # Linie siatki
-    lines_x, lines_y, lines_z = [], [], []
-    for i in range(nx + 1):
-        for j in range(ny + 1):
-            lines_x.extend([i*l, i*l, None]); lines_y.extend([j*w, j*w, None]); lines_z.extend([0, fH, None])
-    for i in range(nx + 1):
-        for k in range(nz + 1):
-            lines_x.extend([i*l, i*l, None]); lines_y.extend([0, fW, None]); lines_z.extend([k*h, k*h, None])
-    for j in range(ny + 1):
-        for k in range(nz + 1):
-            lines_x.extend([0, fL, None]); lines_y.extend([j*w, j*w, None]); lines_z.extend([k*h, k*h, None])
-
-    fig.add_trace(go.Scatter3d(x=lines_x, y=lines_y, z=lines_z, mode='lines', line=dict(color='#000', width=4)))
-    fig.update_layout(scene=dict(aspectmode='data', xaxis_title='Dł', yaxis_title='Szer', zaxis_title='Wys'), margin=dict(l=0,r=0,b=0,t=0), showlegend=False)
+    
+    for czesc in wynik['czesci']:
+        x0, y0, z0 = czesc['pos']
+        dx, dy, dz = czesc['dims']
+        
+        # Rysujemy każdą bryłę z osobnym kolorem
+        fig.add_trace(go.Mesh3d(
+            x=[x0, x0+dx, x0+dx, x0, x0, x0+dx, x0+dx, x0],
+            y=[y0, y0, y0+dy, y0+dy, y0, y0, y0+dy, y0+dy],
+            z=[z0, z0, z0, z0, z0+dz, z0+dz, z0+dz, z0+dz],
+            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1],
+            j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5],
+            k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
+            color=czesc['color'], opacity=0.6, showscale=False
+        ))
+        
+    fig.update_layout(scene=dict(aspectmode='data'), margin=dict(l=0,r=0,b=0,t=0))
     return fig
 
-def szukaj_najlepszego_bloku(n, L, W, H, w_jedn, k_name):
-    mozliwe = []
-    k = KURIERZY[k_name]
-    for nx in range(1, n + 1):
-        for ny in range(1, (n // nx) + 1):
-            if n % (nx * ny) == 0:
-                nz = n // (nx * ny)
-                fL, fW, fH = L*nx, W*ny, H*nz
-                ds = sorted([fL, fW, fH], reverse=True)
-                girth = ds[0] + 2*ds[1] + 2*ds[2]
-                w_tot = w_jedn * n
-                
-                if "Paczkomat" in k_name:
-                    ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"] and w_tot <= k["max_W"])
-                else:
-                    ok = (ds[0] <= k["max_L"] and girth <= k["max_G"] and w_tot <= k["max_W"])
-                
-                if ok:
-                    # Preferujemy bloki "zbite" (małe odchylenie od sześcianu)
-                    odchylenie = abs(nx-ny) + abs(ny-nz) + abs(nx-nz)
-                    mozliwe.append({"conf": (nx, ny, nz), "dims": (fL, fW, fH), "girth": girth, "stab": odchylenie})
-    return sorted(mozliwe, key=lambda x: x['stab'])[0] if mozliwe else None
-
-res = szukaj_najlepszego_bloku(sztuk, L, W, H, Waga, kurier_name)
-
-if res:
-    nx, ny, nz = res['conf']
-    fL, fW, fH = res['dims']
+# --- WYSWIETLANIE ---
+if st.session_state.koszyk:
+    wynik = oblicz_paczke(st.session_state.koszyk)
+    
+    # Sprawdzanie limitów
+    if "Paczkomat" in kurier_name:
+        lim_ok = (wynik['final_dims'][0] <= k['L'] and wynik['final_dims'][1] <= k['W'] and wynik['final_dims'][2] <= k['H'] and wynik['total_w'] <= k['max_W'])
+    else:
+        lim_ok = (max(wynik['final_dims']) <= k['max_L'] and wynik['girth'] <= k['max_G'] and wynik['total_w'] <= k['max_W'])
+    
     c1, c2 = st.columns([1, 1.5])
+    
     with c1:
-        st.subheader("🛠️ Instrukcja ułożenia")
-        st.markdown(f"**Układ blokowy: {nx} x {ny} x {nz}**")
-        st.write(f"1. Ułóż podstawę: **{nx} szt.** na długość i **{ny} szt.** na szerokość.")
-        st.write(f"2. Zrób w ten sposób **{nz}** warstwy/warstw w górę.")
-        
+        st.subheader("📋 Lista w paczce:")
+        for idx, item in enumerate(st.session_state.koszyk):
+            st.write(f"{idx+1}. {list(PRODUKTY_BAZA.keys())[list(PRODUKTY_BAZA.values()).index(item)]}")
+            
         st.divider()
-        st.write(f"📊 **Finalna paczka:**")
-        st.write(f"- Wymiary: **{fL}x{fW}x{fH} cm**")
-        st.write(f"- Waga: **{Waga * sztuk:.1f} kg**")
-        st.write(f"- Obwód (Girth): **{int(res['girth'])} cm**")
+        if lim_ok:
+            st.success("✅ Paczka mieści się w limitach!")
+            st.write(f"Wymiary: {wynik['final_dims'][0]}x{wynik['final_dims'][1]}x{wynik['final_dims'][2]} cm")
+            st.write(f"Waga: {wynik['total_w']:.1f} kg")
+            st.write(f"Obwód: {int(wynik['girth'])} cm")
+        else:
+            st.error("❌ Przekroczono limity kuriera!")
+            
     with c2:
-        st.plotly_chart(rysuj_blok_3d((L, W, H), nx, ny, nz, KURIERZY[kurier_name]['color']), use_container_width=True)
+        st.plotly_chart(rysuj_paczke_multi(wynik), use_container_width=True)
 else:
-    st.error(f"❌ Przekroczono limity {kurier_name}!")
-    st.warning("Spróbuj innego kuriera lub mniejszej ilości sztuk.")
+    st.info("Dodaj produkty z lewego panelu, aby stworzyć instrukcję pakowania.")
