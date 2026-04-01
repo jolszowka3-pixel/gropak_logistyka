@@ -2,109 +2,116 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- DANE KURIERÓW ---
+# --- ROZBUDOWANA BAZA KURIERÓW ---
 KURIERZY = {
-    "DPD": {"max_L": 175, "max_G": 300, "max_W": 31.5},
-    "DHL": {"max_L": 120, "max_G": 300, "max_W": 31.5},
-    "InPost (Gabaryt C)": {"max_L": 64, "max_W": 41, "max_H": 38, "max_Weight": 25},
-    "GLS": {"max_L": 200, "max_G": 300, "max_W": 31.5}
+    "DPD (Standard)": {"max_L": 175, "max_G": 300, "max_W": 31.5, "color": "#dc0032"},
+    "DHL (Standard)": {"max_L": 120, "max_G": 300, "max_W": 31.5, "color": "#ffcc00"},
+    "InPost Kurier": {"max_L": 120, "max_G": 220, "max_W": 30.0, "color": "#ffcc00"},
+    "InPost Paczkomat A": {"L": 64, "W": 38, "H": 8, "max_W": 25.0, "color": "#ffcc00"},
+    "InPost Paczkomat B": {"L": 64, "W": 38, "H": 19, "max_W": 25.0, "color": "#ffcc00"},
+    "InPost Paczkomat C": {"L": 64, "W": 38, "H": 41, "max_W": 25.0, "color": "#ffcc00"},
+    "Poczta Polska (Pocztex)": {"max_L": 150, "max_G": 300, "max_W": 30.0, "color": "#ee1d23"},
+    "GLS": {"max_L": 200, "max_G": 300, "max_W": 31.5, "color": "#003399"},
+    "FedEx": {"max_L": 175, "max_G": 330, "max_W": 35.0, "color": "#4d148c"},
+    "UPS": {"max_L": 274, "max_G": 400, "max_W": 32.0, "color": "#351c15"}
 }
 
-# --- DANE TWOICH PUDEŁEK ---
 PUDEŁKA_GROPAK = {
-    "Karton K1": {"L": 40, "W": 30, "H": 20, "Waga": 2.5},
-    "Karton K2": {"L": 60, "W": 40, "H": 30, "Waga": 6.0},
-    "Karton K3": {"L": 80, "W": 60, "H": 15, "Waga": 10.0},
+    "Karton K1 (40x30x20)": {"L": 40, "W": 30, "H": 20, "Waga": 2.5},
+    "Karton K2 (60x40x30)": {"L": 60, "W": 40, "H": 30, "Waga": 6.0},
+    "Karton K3 (80x60x15)": {"L": 80, "W": 60, "H": 15, "Waga": 10.0},
+    "Fasonowe (35x25x10)": {"L": 35, "W": 25, "H": 10, "Waga": 1.2},
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0, "Waga": 0.0}
 }
 
-st.set_page_config(page_title="Gropak - Instrukcja Pakowania", layout="wide")
-st.title("📦 Instrukcja pakowania przesyłki")
+st.set_page_config(page_title="Gropak - Master Packing", layout="wide")
+st.title("📦 Gropak: System Instrukcji Pakowania")
 
-# --- PANEL BOCZNY: TYLKO KONKRETY ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("1. Wybierz towar")
-    wybrane = st.selectbox("Typ pudełka:", list(PUDEŁKA_GROPAK.keys()))
-    
+    st.header("1. Towar")
+    wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
     if wybrane == "Własny wymiar...":
-        L = st.number_input("Długość (cm)", 1)
-        W = st.number_input("Szerokość (cm)", 1)
-        H = st.number_input("Wysokość (cm)", 1)
-        Waga = st.number_input("Waga (kg)", 0.1)
+        L = st.number_input("Długość (cm)", 1); W = st.number_input("Szerokość (cm)", 1)
+        H = st.number_input("Wysokość (cm)", 1); Waga = st.number_input("Waga (kg)", 0.1)
     else:
-        p = PUDEŁKA_GROPAK[wybrane]
-        L, W, H, Waga = p["L"], p["W"], p["H"], p["Waga"]
-        st.info(f"Rozmiar: {L}x{W}x{H} | Waga: {Waga}kg")
-
-    st.divider()
-    st.header("2. Transport")
-    kurier = st.selectbox("Firma kurierska:", list(KURIERZY.keys()))
-    sztuk_do_sprawdzenia = st.number_input("Ile sztuk chcesz spiąć?", 1, 50, 4)
-
-# --- LOGIKA SZUKANIA NAJLEPSZEGO UKŁADU ---
-def znajdz_uklad(n, L, W, H, Waga, kurier):
-    wyniki = []
-    lim = KURIERZY[kurier]
+        p = PUDEŁKA_GROPAK[wybrane]; L, W, H, Waga = p["L"], p["W"], p["H"], p["Waga"]
     
+    st.divider()
+    st.header("2. Wysyłka")
+    kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
+    sztuk = st.number_input("Ilość sztuk do spięcia:", 1, 100, 4)
+
+# --- FUNKCJA RYSOWANIA (Wyraźny podział) ---
+def rysuj_instrukcje(orig_dims, nx, ny, nz, color):
+    L_f, W_f, H_f = orig_dims[0]*nx, orig_dims[1]*ny, orig_dims[2]*nz
+    fig = go.Figure()
+
+    # Ścianki zewnętrzne (półprzezroczyste)
+    fig.add_trace(go.Mesh3d(
+        x=[0, L_f, L_f, 0, 0, L_f, L_f, 0], y=[0, 0, W_f, W_f, 0, 0, W_f, W_f], z=[0, 0, 0, 0, H_f, H_f, H_f, H_f],
+        i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
+        opacity=0.2, color=color
+    ))
+
+    # Linie podziału (siatka wewnętrzna)
+    lines_x, lines_y, lines_z = [], [], []
+    for x in range(nx + 1):
+        for y in range(ny + 1):
+            lines_x.extend([x*orig_dims[0], x*orig_dims[0]]); lines_y.extend([y*orig_dims[1], y*orig_dims[1]]); lines_z.extend([0, H_f]); lines_x.append(None); lines_y.append(None); lines_z.append(None)
+    for x in range(nx + 1):
+        for z in range(nz + 1):
+            lines_x.extend([x*orig_dims[0], x*orig_dims[0]]); lines_y.extend([0, W_f]); lines_z.extend([z*orig_dims[2], z*orig_dims[2]]); lines_x.append(None); lines_y.append(None); lines_z.append(None)
+    for y in range(ny + 1):
+        for z in range(nz + 1):
+            lines_x.extend([0, L_f]); lines_y.extend([y*orig_dims[1], y*orig_dims[1]]); lines_z.extend([z*orig_dims[2], z*orig_dims[2]]); lines_x.append(None); lines_y.append(None); lines_z.append(None)
+
+    fig.add_trace(go.Scatter3d(x=lines_x, y=lines_y, z=lines_z, mode='lines', line=dict(color='black', width=4)))
+    fig.update_layout(scene=dict(aspectmode='data', xaxis_title='Długość', yaxis_title='Szerokość', zaxis_title='Wysokość'), margin=dict(l=0,r=0,b=0,t=0), showlegend=False)
+    return fig
+
+# --- LOGIKA ---
+def optymalizuj(n, L, W, H, Waga, k_name):
+    wyniki = []
+    k = KURIERZY[k_name]
     for nx in range(1, n + 1):
         for ny in range(1, (n // nx) + 1):
             if n % (nx * ny) == 0:
                 nz = n // (nx * ny)
                 fL, fW, fH = L*nx, W*ny, H*nz
-                dims = sorted([fL, fW, fH], reverse=True)
-                girth = dims[0] + 2*dims[1] + 2*dims[2]
-                total_w = Waga * n
+                ds = sorted([fL, fW, fH], reverse=True)
+                girth = ds[0] + 2*ds[1] + 2*ds[2]
+                w_tot = Waga * n
                 
-                # Sprawdzanie limitów
-                if kurier == "InPost (Gabaryt C)":
-                    ok = (fL <= 64 and fW <= 41 and fH <= 38 and total_w <= 25)
+                if "Paczkomat" in k_name:
+                    ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"] and w_tot <= k["max_W"])
                 else:
-                    ok = (dims[0] <= lim["max_L"] and girth <= lim["max_G"] and total_w <= lim["max_W"])
+                    ok = (ds[0] <= k["max_L"] and girth <= k["max_G"] and w_tot <= k["max_W"])
                 
-                if ok:
-                    wyniki.append({"config": (nx, ny, nz), "dims": (fL, fW, fH), "girth": girth})
-    
-    # Zwróć najbardziej "zbity" układ (najmniejszy obwód)
+                if ok: wyniki.append({"conf": (nx, ny, nz), "dims": (fL, fW, fH), "girth": girth})
     return sorted(wyniki, key=lambda x: x['girth'])[0] if wyniki else None
 
-# --- WYNIK I INSTRUKCJA ---
-uklad = znajdz_uklad(sztuk_do_sprawdzenia, L, W, H, Waga, kurier)
+res = optymalizuj(sztuk, L, W, H, Waga, kurier_name)
 
-if uklad:
-    nx, ny, nz = uklad['config']
-    fL, fW, fH = uklad['dims']
-    
-    col1, col2 = st.columns([1, 1.5])
-    
-    with col1:
-        st.subheader("📝 Co zrobić:")
+if res:
+    nx, ny, nz = res['conf']
+    fL, fW, fH = res['dims']
+    c1, c2 = st.columns([1, 1.5])
+    with c1:
+        st.subheader("📋 Instrukcja Pakowania")
+        st.success(f"Można spiąć te **{sztuk} sztuk** w jedną paczkę!")
         st.markdown(f"""
-        1. Połóż obok siebie **{nx} szt.** (na długość).
-        2. Dostaw obok **{ny} rzędy**.
-        3. Na górę połóż kolejne **{nz-1} warstwy** (łącznie {nz} w górę).
+        - **Krok 1:** Ułóż bazę: **{nx} rzędy** (długość) i **{ny} kolumny** (szerokość).
+        - **Krok 2:** Dodaj warstwy w górę: łącznie **{nz} poziomów**.
         
-        **Finalna paczka:**
-        - Wymiary: **{fL} x {fW} x {fH} cm**
-        - Waga: **{Waga * sztuk_do_sprawdzenia:.1f} kg**
+        **Dane paczki:**
+        - Gabaryty: **{fL} x {fW} x {fH} cm**
+        - Waga: **{Waga * sztuk:.1f} kg**
+        - Kurier: **{kurier_name}**
         """)
-        st.warning(f"⚠️ Pamiętaj o solidnym spięciu taśmą lub folią stretch!")
-
-    with col2:
-        # Rysowanie 3D
-        fig = go.Figure()
-        # Ścianki
-        fig.add_trace(go.Mesh3d(
-            x=[0, fL, fL, 0, 0, fL, fL, 0],
-            y=[0, 0, fW, fW, 0, 0, fW, fW],
-            z=[0, 0, 0, 0, fH, fH, fH, fH],
-            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1],
-            j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5],
-            k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-            opacity=0.5, color='#004a99'
-        ))
-        fig.update_layout(scene=dict(aspectmode='data', xaxis_title='L', yaxis_title='W', zaxis_title='H'), margin=dict(l=0,r=0,b=0,t=0))
-        st.plotly_chart(fig, use_container_width=True)
-
+        st.info("💡 Wskazówka: Jeśli paczka jest ciężka, użyj podwójnego owinięcia folią na łączeniach.")
+    with c2:
+        st.plotly_chart(rysuj_instrukcje((L, W, H), nx, ny, nz, KURIERZY[kurier_name]['color']), use_container_width=True)
 else:
-    st.error(f"❌ TEGO NIE SPPNIESZ: {sztuk_do_sprawdzenia} sztuk przekracza limity {kurier}!")
-    st.info("Spróbuj zmniejszyć liczbę sztuk lub wyślij to jako dwie osobne paczki.")
+    st.error(f"❌ Przekroczono limity {kurier_name} dla {sztuk} sztuk!")
+    st.warning("Zmień przewoźnika na takiego z większym limitem (np. UPS/GLS) lub zmniejsz ilość sztuk.")
