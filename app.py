@@ -2,8 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- KOMPLEKSOWA BAZA KURIERÓW (Wszystko w mm i kg) ---
-# max_L: najdłuższy bok, max_G: obwód (L + 2W + 2H), max_W: waga
+# --- KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
     "DPD (Standard)": {"max_L": 1750, "max_G": 3000, "max_W": 31.5, "color": "#dc0032"},
     "DHL (Standard)": {"max_L": 1200, "max_G": 3000, "max_W": 31.5, "color": "#ffcc00"},
@@ -17,22 +16,79 @@ KURIERZY = {
     "GLS (Polska)": {"max_L": 2000, "max_G": 3000, "max_W": 31.5, "color": "#003399"},
     "UPS Standard": {"max_L": 2740, "max_G": 4000, "max_W": 32.0, "color": "#351c15"},
     "FedEx Polska": {"max_L": 1750, "max_G": 3300, "max_W": 35.0, "color": "#4d148c"},
-    "Pocztex (Standard)": {"max_L": 1500, "max_G": 3000, "max_W": 30.0, "color": "#ee1d23"},
-    "Geis": {"max_L": 1750, "max_G": 3000, "max_W": 31.5, "color": "#004a99"},
-    "Meest": {"max_L": 1500, "max_G": 3000, "max_W": 30.0, "color": "#25b14b"},
-    "TNT Express": {"max_L": 2400, "max_G": 4000, "max_W": 30.0, "color": "#ff6600"},
-    "Ambro Express (Gabaryt)": {"max_L": 3000, "max_G": 5000, "max_W": 50.0, "color": "#000000"}
+    "Pocztex": {"max_L": 1500, "max_G": 3000, "max_W": 30.0, "color": "#ee1d23"},
+    "TNT Express": {"max_L": 2400, "max_G": 4000, "max_W": 30.0, "color": "#ff6600"}
 }
 
+# --- BAZA TWOICH KARTONÓW (Z odczytanych screenów) ---
 PUDEŁKA_GROPAK = {
-    "Karton K1 (400x300x200)": {"L": 400, "W": 300, "H": 200, "Waga": 2.5},
-    "Karton K2 (600x400x300)": {"L": 600, "W": 400, "H": 300, "Waga": 6.0},
-    "Karton K3 (800x600x150)": {"L": 800, "W": 600, "H": 150, "Waga": 10.0},
-    "Karton Fasonowy (350x250x100)": {"L": 350, "W": 250, "H": 100, "Waga": 1.2},
+    # Produkty z nazwami
+    "Karton na wiórka (380x380x240)": {"L": 380, "W": 380, "H": 240, "Waga": 0.0},
+    "Zbiorczy na papier nacinany (390x390x620)": {"L": 390, "W": 390, "H": 620, "Waga": 0.0},
+    "Zbiorczy na papier nacinany (390x390x420)": {"L": 390, "W": 390, "H": 420, "Waga": 0.0},
+    "Dyspenser 200ka (210x350x275)": {"L": 210, "W": 350, "H": 275, "Waga": 0.0},
+    "Dyspenser 400ka (410x255x180)": {"L": 410, "W": 255, "H": 180, "Waga": 0.0},
+    "Zbiorczy na dyspenser 200ka (365x265x285)": {"L": 365, "W": 265, "H": 285, "Waga": 0.0},
+    "Zbiorczy na dyspenser 400ka (465x245x190)": {"L": 465, "W": 245, "H": 190, "Waga": 0.0},
+    
+    # Seria A-L
+    "A11 (595x250x180)": {"L": 595, "W": 250, "H": 180, "Waga": 0.0},
+    "B12 (595x295x230)": {"L": 595, "W": 295, "H": 230, "Waga": 0.0},
+    "C13 (595x230x175)": {"L": 595, "W": 230, "H": 175, "Waga": 0.0},
+    "D14 (595x280x205)": {"L": 595, "W": 280, "H": 205, "Waga": 0.0},
+    "E15 (595x280x245)": {"L": 595, "W": 280, "H": 245, "Waga": 0.0},
+    "F16 (595x360x250)": {"L": 595, "W": 360, "H": 250, "Waga": 0.0},
+    "G17 (595x360x265)": {"L": 595, "W": 360, "H": 265, "Waga": 0.0},
+    "H18 (595x375x295)": {"L": 595, "W": 375, "H": 295, "Waga": 0.0},
+    "I19 (455x325x295)": {"L": 455, "W": 325, "H": 295, "Waga": 0.0},
+    "K20 (485x385x295)": {"L": 485, "W": 385, "H": 295, "Waga": 0.0},
+    "L21 (485x430x295)": {"L": 485, "W": 430, "H": 295, "Waga": 0.0},
+
+    # Kartony na folię
+    "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600, "Waga": 0.0},
+    "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500, "Waga": 0.0},
+    "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220, "Waga": 0.0},
+    "Karton na folię (470x470x200)": {"L": 470, "W": 470, "H": 200, "Waga": 0.0},
+    "Karton na folię (470x470x300)": {"L": 470, "W": 470, "H": 300, "Waga": 0.0},
+    "Karton na folię (470x470x400)": {"L": 470, "W": 470, "H": 400, "Waga": 0.0},
+    "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500, "Waga": 0.0},
+
+    # Papier makulaturowy wypełniacz
+    "Wypełniacz 295x295 (H:210)": {"L": 295, "W": 295, "H": 210, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:310)": {"L": 295, "W": 295, "H": 310, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:340)": {"L": 295, "W": 295, "H": 340, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:360)": {"L": 295, "W": 295, "H": 360, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:410)": {"L": 295, "W": 295, "H": 410, "Waga": 0.0},
+    "Wypełniacz 230x230 (H:210)": {"L": 230, "W": 230, "H": 210, "Waga": 0.0},
+    "Wypełniacz 230x230 (H:310)": {"L": 230, "W": 230, "H": 310, "Waga": 0.0},
+    "Wypełniacz 230x230 (H:410)": {"L": 230, "W": 230, "H": 410, "Waga": 0.0},
+
+    # Pozostałe (z bezimiennych tabel 90-230)
+    "Karton 90x90 (H:210)": {"L": 90, "W": 90, "H": 210, "Waga": 0.0},
+    "Karton 90x90 (H:310)": {"L": 90, "W": 90, "H": 310, "Waga": 0.0},
+    "Karton 90x90 (H:410)": {"L": 90, "W": 90, "H": 410, "Waga": 0.0},
+    "Karton 90x90 (H:510)": {"L": 90, "W": 90, "H": 510, "Waga": 0.0},
+    "Karton 90x90 (H:610)": {"L": 90, "W": 90, "H": 610, "Waga": 0.0},
+    "Karton 110x110 (H:210)": {"L": 110, "W": 110, "H": 210, "Waga": 0.0},
+    "Karton 110x110 (H:310)": {"L": 110, "W": 110, "H": 310, "Waga": 0.0},
+    "Karton 110x110 (H:410)": {"L": 110, "W": 110, "H": 410, "Waga": 0.0},
+    "Karton 110x110 (H:510)": {"L": 110, "W": 110, "H": 510, "Waga": 0.0},
+    "Karton 110x110 (H:610)": {"L": 110, "W": 110, "H": 610, "Waga": 0.0},
+    "Karton 160x160 (H:210)": {"L": 160, "W": 160, "H": 210, "Waga": 0.0},
+    "Karton 160x160 (H:310)": {"L": 160, "W": 160, "H": 310, "Waga": 0.0},
+    "Karton 160x160 (H:410)": {"L": 160, "W": 160, "H": 410, "Waga": 0.0},
+    "Karton 160x160 (H:510)": {"L": 160, "W": 160, "H": 510, "Waga": 0.0},
+    "Karton 160x160 (H:610)": {"L": 160, "W": 160, "H": 610, "Waga": 0.0},
+    "Karton 230x230 (H:210)": {"L": 230, "W": 230, "H": 210, "Waga": 0.0},
+    "Karton 230x230 (H:310)": {"L": 230, "W": 230, "H": 310, "Waga": 0.0},
+    "Karton 230x230 (H:410)": {"L": 230, "W": 230, "H": 410, "Waga": 0.0},
+    "Karton 230x230 (H:510)": {"L": 230, "W": 230, "H": 510, "Waga": 0.0},
+    "Karton 230x230 (H:610)": {"L": 230, "W": 230, "H": 610, "Waga": 0.0},
+
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0, "Waga": 0.0}
 }
 
-st.set_page_config(page_title="Gropak - Super Optymalizator (mm)", layout="wide")
+st.set_page_config(page_title="Gropak - MultiKurier (mm)", layout="wide")
 st.title("📦 Gropak: System Optymalizacji Wysyłek (mm)")
 
 with st.sidebar:
@@ -57,7 +113,6 @@ with st.sidebar:
 def rysuj_layout_3d(bloki, color, is_pallet=False):
     fig = go.Figure()
     if is_pallet:
-        # Rysuj paletę EURO w mm
         fig.add_trace(go.Mesh3d(x=[0,1200,1200,0,0,1200,1200,0], y=[0,0,800,800,0,0,800,800], z=[-144,-144,-144,-144,0,0,0,0], i=[0,1,2,3,0,4,5,6,7,4,0,1], j=[1,2,3,0,4,5,6,7,4,0,4,5], k=[4,5,6,7,1,2,3,0,5,6,1,2], opacity=1, color="#8B4513"))
 
     for b in bloki:
@@ -91,12 +146,10 @@ def optymalizuj_paczke(n, L, W, H, w_jedn, k_name):
                 fL, fW, fH = L*nx, W*ny, H*nz
                 ds = sorted([fL, fW, fH], reverse=True)
                 girth = ds[0] + 2*ds[1] + 2*ds[2]
-                
                 if "Paczkomat" in k_name or "Orlen Paczka" in k_name:
                     ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"] and w_jedn*n <= k["max_W"])
                 else:
                     ok = (ds[0] <= k["max_L"] and girth <= k["max_G"] and w_jedn*n <= k["max_W"])
-                
                 if ok:
                     wyniki.append({"conf": (nx, ny, nz), "dims": (fL, fW, fH), "girth": girth, "stab": abs(nx-ny)+abs(ny-nz)})
     return sorted(wyniki, key=lambda x: x['stab'])[0] if wyniki else None
@@ -108,7 +161,7 @@ def optymalizuj_palete(L, W, H, h_max):
     for ol, ow, oh in [(L,W,H), (L,H,W), (W,L,H), (W,H,L), (H,L,W), (H,W,L)]:
         nz = h_max // oh
         if nz == 0: continue
-        for split in range(0, 1201, 50): # Split co 50mm dla wydajności
+        for split in range(0, 1201, 50):
             nx_a = split // ol
             ny_a = 800 // ow
             nx_b = (1200 - (nx_a * ol)) // ow
@@ -132,7 +185,6 @@ if tryb == "Łączenie Paczek (Bundling)":
             st.subheader("📋 Instrukcja Spiania")
             st.success(f"Układ optymalny: **{nx} x {ny} x {nz}**")
             st.write(f"- Finalne wymiary: {res['dims'][0]}x{res['dims'][1]}x{res['dims'][2]} mm")
-            st.write(f"- Waga: {Waga*sztuk:.1f} kg | Obwód: {int(res['girth'])} mm")
         with c2:
             st.plotly_chart(rysuj_layout_3d([{'pos': (0,0,0), 'dims': (L, W, H), 'count': (nx, ny, nz)}], KURIERZY[kurier_name]['color']), use_container_width=True)
     else:
@@ -145,7 +197,6 @@ else: # PALETA
             st.subheader("📋 Instrukcja Palety")
             st.success(f"Razem na palecie: **{total} sztuk**")
             st.write(f"- Wysokość ładunku: {layout[0]['dims'][2] * layout[0]['count'][2]} mm")
-            st.write(f"- Waga towaru: {total * Waga:.1f} kg")
             st.divider()
             for i, b in enumerate(layout):
                 if b['count'][0]*b['count'][1] > 0:
