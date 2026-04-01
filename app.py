@@ -43,8 +43,7 @@ with st.sidebar:
         kurier_name = st.selectbox("Kurier:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk do spięcia:", 1, 100, 4)
     else:
-        h_max = st.number_input("Docelowa wysokość palety (cm):", 50, 250, 160)
-        st.info("Wymiary palety: 120 x 80 cm")
+        h_max = st.number_input("Docelowa wysokość palety (cm):", 20, 250, 160)
 
 # --- FUNKCJA WIZUALIZACJI ---
 def rysuj_blok_3d(orig_dims, nx, ny, nz, color, is_pallet=False):
@@ -52,22 +51,21 @@ def rysuj_blok_3d(orig_dims, nx, ny, nz, color, is_pallet=False):
     fL, fW, fH = l*nx, w*ny, h*nz
     fig = go.Figure()
 
-    # Jeśli paleta, dorysowujemy podstawę palety
     if is_pallet:
+        # Podstawa palety
         fig.add_trace(go.Mesh3d(
-            x=[0, 120, 120, 0, 0, 120, 120, 0], y=[0, 0, 80, 80, 0, 0, 80, 80], z=[-15, -15, -15, -15, 0, 0, 0, 0],
+            x=[0, 120, 120, 0, 0, 120, 120, 0], y=[0, 0, 80, 80, 0, 0, 80, 80], z=[-14.4, -14.4, -14.4, -14.4, 0, 0, 0, 0],
             i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
             opacity=1, color="#8B4513"
         ))
 
-    # Mesh3d dla kartonów
+    # Kartony
     fig.add_trace(go.Mesh3d(
         x=[0, fL, fL, 0, 0, fL, fL, 0], y=[0, 0, fW, fW, 0, 0, fW, fW], z=[0, 0, 0, 0, fH, fH, fH, fH],
         i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
         opacity=0.25, color=color
     ))
 
-    # Linie siatki kartonów
     lines_x, lines_y, lines_z = [], [], []
     for i in range(nx + 1):
         for j in range(ny + 1):
@@ -104,25 +102,24 @@ def szukaj_paczki(n, L, W, H, w_jedn, k_name):
 
 # --- LOGIKA PALETY ---
 def szukaj_palety(L, W, H, h_max):
-    # Sprawdzamy wszystkie orientacje pudełka (na którym boku leży)
     orientacje = [(L,W,H), (L,H,W), (W,L,H), (W,H,L), (H,L,W), (H,W,L)]
     wyniki = []
     
     for ol, ow, oh in orientacje:
-        # Ile sztuk na warstwie 120x80
         nx = 120 // ol
         ny = 80 // ow
         if nx > 0 and ny > 0:
-            sztuk_warstwa = nx * ny
-            ile_warstw = h_max // oh
-            total = sztuk_warstwa * ile_warstw
-            # Obliczamy wolną przestrzeń (im mniej tym lepiej)
-            wolne = (120 * 80) - (f"{nx*ol}" * f"{ny*ow}") # uproszczone
-            wyniki.append({"conf": (int(nx), int(ny), int(ile_warstw)), "dims": (ol, ow, oh), "total": int(total)})
+            nz = h_max // oh
+            if nz > 0:
+                total = nx * ny * nz
+                # Obliczanie wykorzystania powierzchni (bez błędnych stringów)
+                area_used = (nx * ol) * (ny * ow)
+                wyniki.append({"conf": (int(nx), int(ny), int(nz)), "dims": (ol, ow, oh), "total": int(total), "area": area_used})
             
-    return sorted(wyniki, key=lambda x: x['total'], reverse=True)[0] if wyniki else None
+    # Wybieramy orientację, która mieści najwięcej sztuk, a potem najlepiej wypełnia spód
+    return sorted(wyniki, key=lambda x: (x['total'], x['area']), reverse=True)[0] if wyniki else None
 
-# --- WYSWIETLANIE ---
+# --- WYŚWIETLANIE ---
 if tryb == "Paczka Kurierska":
     res = szukaj_paczki(sztuk, L, W, H, Waga, kurier_name)
     if res:
@@ -130,9 +127,9 @@ if tryb == "Paczka Kurierska":
         c1, c2 = st.columns([1, 1.5])
         with c1:
             st.subheader("🛠️ Instrukcja Paczki")
-            st.write(f"Układ: **{nx} x {ny} x {nz}**")
-            st.write(f"Wymiary: {res['dims'][0]}x{res['dims'][1]}x{res['dims'][2]} cm")
-            st.write(f"Waga: {Waga*sztuk:.1f} kg")
+            st.success(f"Układ: **{nx} x {ny} x {nz}**")
+            st.write(f"Finalne wymiary: {res['dims'][0]}x{res['dims'][1]}x{res['dims'][2]} cm")
+            st.write(f"Waga całkowita: {Waga*sztuk:.1f} kg")
         with c2:
             st.plotly_chart(rysuj_blok_3d((L, W, H), nx, ny, nz, KURIERZY[kurier_name]['color']), use_container_width=True)
     else:
@@ -147,13 +144,13 @@ else:
         with c1:
             st.subheader("🛠️ Instrukcja Palety")
             st.success(f"Razem na palecie: **{res['total']} sztuk**")
-            st.write(f"1. Połóż karton na boku: **{ol} x {ow} cm** (wysokość kartonu: {oh} cm)")
-            st.write(f"2. Na jednej warstwie ułóż: **{nx}** (dł) x **{ny}** (szer) = **{nx*ny} szt.**")
-            st.write(f"3. Ułóż **{nz} warstw** w górę.")
+            st.write(f"1. Ułóż karton na boku: **{ol} x {ow} cm** (wysokość: {oh} cm)")
+            st.write(f"2. Na warstwie mieści się: **{nx*ny} szt.** ({nx} dł. x {ny} szer.)")
+            st.write(f"3. Liczba warstw: **{nz}**")
             st.divider()
-            st.write(f"Wysokość ładunku: {nz * oh} cm")
+            st.write(f"Wysokość całkowita: {nz * oh} cm")
             st.write(f"Waga towaru: {res['total'] * Waga:.1f} kg")
         with c2:
             st.plotly_chart(rysuj_blok_3d((ol, ow, oh), nx, ny, nz, "#2ca02c", is_pallet=True), use_container_width=True)
     else:
-        st.error("❌ Karton jest za duży, aby zmieścić się na palecie lub przekracza wysokość!")
+        st.error("❌ Karton nie mieści się na palecie!")
