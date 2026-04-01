@@ -2,17 +2,26 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- BAZA KURIERÓW ---
+# --- KOMPLEKSOWA BAZA KURIERÓW ---
+# max_L: najdłuższy bok, max_G: obwód (L + 2W + 2H), max_W: waga
 KURIERZY = {
     "DPD (Standard)": {"max_L": 175, "max_G": 300, "max_W": 31.5, "color": "#dc0032"},
     "DHL (Standard)": {"max_L": 120, "max_G": 300, "max_W": 31.5, "color": "#ffcc00"},
+    "InPost Paczkomat A": {"L": 64, "W": 38, "H": 8, "max_W": 25.0, "color": "#ffcc00"},
+    "InPost Paczkomat B": {"L": 64, "W": 38, "H": 19, "max_W": 25.0, "color": "#ffcc00"},
     "InPost Paczkomat C": {"L": 64, "W": 38, "H": 41, "max_W": 25.0, "color": "#ffcc00"},
     "InPost Kurier": {"max_L": 120, "max_G": 220, "max_W": 30.0, "color": "#ffcc00"},
+    "Orlen Paczka S": {"L": 60, "W": 38, "H": 8, "max_W": 20.0, "color": "#e30613"},
+    "Orlen Paczka M": {"L": 60, "W": 38, "H": 19, "max_W": 20.0, "color": "#e30613"},
+    "Orlen Paczka L": {"L": 60, "W": 38, "H": 41, "max_W": 20.0, "color": "#e30613"},
     "GLS (Polska)": {"max_L": 200, "max_G": 300, "max_W": 31.5, "color": "#003399"},
     "UPS Standard": {"max_L": 274, "max_G": 400, "max_W": 32.0, "color": "#351c15"},
     "FedEx Polska": {"max_L": 175, "max_G": 330, "max_W": 35.0, "color": "#4d148c"},
-    "Pocztex": {"max_L": 150, "max_G": 300, "max_W": 30.0, "color": "#ee1d23"},
-    "TNT (Express)": {"max_L": 240, "max_G": 400, "max_W": 30.0, "color": "#ff6600"}
+    "Pocztex (Standard)": {"max_L": 150, "max_G": 300, "max_W": 30.0, "color": "#ee1d23"},
+    "Geis": {"max_L": 175, "max_G": 300, "max_W": 31.5, "color": "#004a99"},
+    "Meest": {"max_L": 150, "max_G": 300, "max_W": 30.0, "color": "#25b14b"},
+    "TNT Express": {"max_L": 240, "max_G": 400, "max_W": 30.0, "color": "#ff6600"},
+    "Ambro Express (Gabaryt)": {"max_L": 300, "max_G": 500, "max_W": 50.0, "color": "#000000"}
 }
 
 PUDEŁKA_GROPAK = {
@@ -48,7 +57,6 @@ with st.sidebar:
 def rysuj_layout_3d(bloki, color, is_pallet=False):
     fig = go.Figure()
     if is_pallet:
-        # Rysuj paletę
         fig.add_trace(go.Mesh3d(x=[0,120,120,0,0,120,120,0], y=[0,0,80,80,0,0,80,80], z=[-14,-14,-14,-14,0,0,0,0], i=[0,1,2,3,0,4,5,6,7,4,0,1], j=[1,2,3,0,4,5,6,7,4,0,4,5], k=[4,5,6,7,1,2,3,0,5,6,1,2], opacity=1, color="#8B4513"))
 
     for b in bloki:
@@ -57,7 +65,6 @@ def rysuj_layout_3d(bloki, color, is_pallet=False):
         nx, ny, nz = b['count']
         fL, fW, fH = l*nx, w*ny, h*nz
         fig.add_trace(go.Mesh3d(x=[x0, x0+fL, x0+fL, x0, x0, x0+fL, x0+fL, x0], y=[y0, y0, y0+fW, y0+fW, y0, y0, y0+fW, y0+fW], z=[z0, z0, z0, z0, z0+fH, z0+fH, z0+fH, z0+fH], i=[0,1,2,3,0,4,5,6,7,4,0,1], j=[1,2,3,0,4,5,6,7,4,0,4,5], k=[4,5,6,7,1,2,3,0,5,6,1,2], opacity=0.3, color=color))
-        # Siatka
         lx, ly, lz = [], [], []
         for i in range(nx + 1):
             for j in range(ny + 1):
@@ -83,10 +90,13 @@ def optymalizuj_paczke(n, L, W, H, w_jedn, k_name):
                 fL, fW, fH = L*nx, W*ny, H*nz
                 ds = sorted([fL, fW, fH], reverse=True)
                 girth = ds[0] + 2*ds[1] + 2*ds[2]
-                if "Paczkomat" in k_name:
+                
+                # Specyficzna logika dla automatów paczkowych (sztywne wymiary)
+                if "Paczkomat" in k_name or "Orlen Paczka" in k_name:
                     ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"] and w_jedn*n <= k["max_W"])
                 else:
                     ok = (ds[0] <= k["max_L"] and girth <= k["max_G"] and w_jedn*n <= k["max_W"])
+                
                 if ok:
                     wyniki.append({"conf": (nx, ny, nz), "dims": (fL, fW, fH), "girth": girth, "stab": abs(nx-ny)+abs(ny-nz)})
     return sorted(wyniki, key=lambda x: x['stab'])[0] if wyniki else None
@@ -95,12 +105,10 @@ def optymalizuj_paczke(n, L, W, H, w_jedn, k_name):
 def optymalizuj_palete(L, W, H, h_max):
     best_total = 0
     best_layout = []
-    # Testuj 6 orientacji kartonu jako bazy
     for ol, ow, oh in [(L,W,H), (L,H,W), (W,L,H), (W,H,L), (H,L,W), (H,W,L)]:
         nz = h_max // oh
         if nz == 0: continue
-        # Split Gilotynowy (pionowy lub poziomy)
-        for split in range(0, 121, 5): # Split po długości palety
+        for split in range(0, 121, 5):
             nx_a = split // ol
             ny_a = 80 // ow
             nx_b = (120 - (nx_a * ol)) // ow
