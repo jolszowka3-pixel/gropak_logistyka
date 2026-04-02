@@ -47,10 +47,9 @@ PUDEŁKA_GROPAK = {
 
 KOLOR_KARTONU = "#C19A6B"
 
-st.set_page_config(page_title="Gropak Master Pro", layout="wide")
-st.title("📦 Gropak: System Optymalizacji Wysyłek")
+st.set_page_config(page_title="Gropak Master Pro v4", layout="wide")
+st.title("📦 Gropak: System Optymalizacji (Wersja Solidna)")
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.header("1. Wybór towaru")
     wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
@@ -69,70 +68,63 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość palety (mm):", 200, 2500, 1600)
 
-# --- REALISTYCZNA WIZUALIZACJA 3D ---
+# --- ZAAWANSOWANA WIZUALIZACJA 3D (Brak prześwitów) ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
+    def dodaj_bryle(x, y, z, l, w, h, kolor, nazwa="Obiekt", show_edges=True):
+        # Generowanie wierzchołków i trójkątów dla pełnego, zamkniętego sześcianu
+        fig.add_trace(go.Mesh3d(
+            x=[x, x+l, x+l, x, x, x+l, x+l, x],
+            y=[y, y, y+w, y+w, y, y, y+w, y+w],
+            z=[z, z, z, z, z+h, z+h, z+h, z+h],
+            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1],
+            j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5],
+            k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
+            opacity=1, color=kolor, flatshading=True,
+            lighting=dict(ambient=0.5, diffuse=0.8, roughness=0.9, specular=0.1, fresnel=0.2),
+            lightposition=dict(x=3000, y=3000, z=5000),
+            name=nazwa, showlegend=False
+        ))
+        if show_edges:
+            lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
+            ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
+            lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
+            fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=3), showlegend=False))
+
     if is_pallet:
-        # --- KONSTRUKCJA REALISTYCZNEJ PALETY EURO ---
-        pallet_color = "#5D4037" # Ciemne drewno
-        # 1. Trzy płozy dolne (podłużne)
-        for y_off in [0, 350, 700]:
-            fig.add_trace(go.Mesh3d(
-                x=[0,1200,1200,0,0,1200,1200,0], y=[y_off, y_off, y_off+100, y_off+100, y_off, y_off, y_off+100, y_off+100],
-                z=[-144,-144,-144,-144,-122,-122,-122,-122],
-                i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-                opacity=1, color=pallet_color, flatshading=True, showlegend=False
-            ))
-        # 2. Dziewięć klocków (wsporników)
-        for x_off in [0, 525, 1050]:
+        pallet_color = "#4E342E"
+        # Konstrukcja palety (elementy solidne)
+        for y_off in [0, 350, 700]: # Płozy
+            dodaj_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False)
+        for x_off in [0, 525, 1050]: # Klocki
             for y_off in [0, 350, 700]:
-                fig.add_trace(go.Mesh3d(
-                    x=[x_off, x_off+150, x_off+150, x_off, x_off, x_off+150, x_off+150, x_off],
-                    y=[y_off, y_off, y_off+100, y_off+100, y_off, y_off, y_off+100, y_off+100],
-                    z=[-122,-122,-122,-122,-44,-44,-44,-44],
-                    i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-                    opacity=1, color=pallet_color, flatshading=True, showlegend=False
-                ))
-        # 3. Pięć desek wierzchnich
-        for y_off in [0, 175, 350, 525, 700]:
-            fig.add_trace(go.Mesh3d(
-                x=[0,1200,1200,0,0,1200,1200,0], y=[y_off, y_off, y_off+100, y_off+100, y_off, y_off, y_off+100, y_off+100],
-                z=[-44,-44,-44,-44,0,0,0,0],
-                i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-                opacity=1, color=pallet_color, flatshading=True, showlegend=False
-            ))
+                dodaj_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False)
+        for y_off in [0, 175, 350, 525, 700]: # Deski wierzch
+            dodaj_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False)
 
     for b in bloki:
         x0, y0, z0 = b['pos']
         l, w, h = b['dims']
         nx, ny, nz = b['count']
-        
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
-                    x = x0 + ix * l
-                    y = y0 + iy * w
-                    z = z0 + iz * h
-                    fig.add_trace(go.Mesh3d(
-                        x=[x, x+l, x+l, x, x, x+l, x+l, x],
-                        y=[y, y, y+w, y+w, y, y, y+w, y+w],
-                        z=[z, z, z, z, z+h, z+h, z+h, z+h],
-                        i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-                        opacity=1, color=KOLOR_KARTONU, flatshading=True, showlegend=False
-                    ))
-                    lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
-                    ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
-                    lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
-                    fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False))
+                    dodaj_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU)
     
     fig.update_layout(
-        scene=dict(aspectmode='data', xaxis_title='Dł (mm)', yaxis_title='Szer (mm)', zaxis_title='Wys (mm)'),
+        scene=dict(
+            aspectmode='data',
+            xaxis=dict(backgroundcolor="rgb(230, 230,230)", gridcolor="white", showbackground=True, zerolinecolor="white"),
+            yaxis=dict(backgroundcolor="rgb(230, 230,230)", gridcolor="white", showbackground=True, zerolinecolor="white"),
+            zaxis=dict(backgroundcolor="rgb(200, 200,200)", gridcolor="white", showbackground=True, zerolinecolor="white"),
+            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
+        ),
         margin=dict(l=0, r=0, b=0, t=0)
     )
     return fig
 
-# --- LOGIKA OPTYMALIZACJI ---
+# --- LOGIKA OPTYMALIZACJI (Bez zmian) ---
 def optymalizuj_paczke(n, L, W, H, k_name):
     k = KURIERZY[k_name]
     wyniki = []
@@ -193,13 +185,13 @@ if tryb == "📦 Paczka Kurierska":
         with c1:
             st.subheader("📋 Instrukcja")
             st.success(f"Spięto: **{sztuk} sztuk**")
-            st.write(f"- Karton ułożony na boku: **{rl}x{rw} mm**")
+            st.write(f"- Ułożenie: **{rl}x{rw} mm**")
             st.write(f"- Układ: **{nx} x {ny} x {nz}**")
             st.info(f"Finał: **{res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm**")
         with c2:
             st.plotly_chart(rysuj_layout_3d([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
     else:
-        st.error("❌ Przekroczono limity kuriera!")
+        st.error("❌ Nie mieści się!")
 else:
     layout, total = optymalizuj_palete(L, W, H, h_max)
     if total > 0:
@@ -214,4 +206,4 @@ else:
         with c2:
             st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
     else:
-        st.error("❌ Karton nie mieści się na palecie!")
+        st.error("❌ Za duży karton!")
