@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- KOMPLEKSOWA BAZA KURIERÓW (mm i kg) ---
+# --- KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
     "DPD (Standard)": {"max_L": 1750, "max_G": 3000, "max_W": 31.5},
     "DHL (Standard)": {"max_L": 1200, "max_G": 3000, "max_W": 31.5},
@@ -21,20 +21,15 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- TWOJA KOMPLETNA BAZA KARTONÓW (Przeliczona na mm) ---
+# --- TWOJA KOMPLETNA BAZA KARTONÓW ---
 PUDEŁKA_GROPAK = {
-    # Screen 10 & 9
     "Karton na wiórka (380x380x240)": {"L": 380, "W": 380, "H": 240, "Waga": 0.0},
     "Zbiorczy papier nacinany (390x390x620)": {"L": 390, "W": 390, "H": 620, "Waga": 0.0},
     "Zbiorczy papier nacinany (390x390x420)": {"L": 390, "W": 390, "H": 420, "Waga": 0.0},
-    
-    # Screen 6 (Dyspensery)
     "Dyspenser 200ka (210x350x275)": {"L": 210, "W": 350, "H": 275, "Waga": 0.0},
     "Dyspenser 400ka (410x255x180)": {"L": 410, "W": 255, "H": 180, "Waga": 0.0},
     "Zbiorczy dyspenser 200ka (365x265x285)": {"L": 365, "W": 265, "H": 285, "Waga": 0.0},
     "Zbiorczy dyspenser 400ka (465x245x190)": {"L": 465, "W": 245, "H": 190, "Waga": 0.0},
-    
-    # Screen 5 (A-L Series)
     "A11 (595x250x180)": {"L": 595, "W": 250, "H": 180, "Waga": 0.0},
     "B12 (595x295x230)": {"L": 595, "W": 295, "H": 230, "Waga": 0.0},
     "C13 (595x230x175)": {"L": 595, "W": 230, "H": 175, "Waga": 0.0},
@@ -46,8 +41,6 @@ PUDEŁKA_GROPAK = {
     "I19 (455x325x295)": {"L": 455, "W": 325, "H": 295, "Waga": 0.0},
     "K20 (485x385x295)": {"L": 485, "W": 385, "H": 295, "Waga": 0.0},
     "L21 (485x430x295)": {"L": 485, "W": 430, "H": 295, "Waga": 0.0},
-
-    # Screen 4 (Folie)
     "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600, "Waga": 0.0},
     "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500, "Waga": 0.0},
     "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220, "Waga": 0.0},
@@ -55,8 +48,6 @@ PUDEŁKA_GROPAK = {
     "Karton na folię (470x470x300)": {"L": 470, "W": 470, "H": 300, "Waga": 0.0},
     "Karton na folię (470x470x400)": {"L": 470, "W": 470, "H": 400, "Waga": 0.0},
     "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500, "Waga": 0.0},
-
-    # Screen 3 (Wypełniacze)
     "Wypełniacz 295x295 (H:210)": {"L": 295, "W": 295, "H": 210, "Waga": 0.0},
     "Wypełniacz 295x295 (H:310)": {"L": 295, "W": 295, "H": 310, "Waga": 0.0},
     "Wypełniacz 295x295 (H:340)": {"L": 295, "W": 295, "H": 340, "Waga": 0.0},
@@ -65,8 +56,6 @@ PUDEŁKA_GROPAK = {
     "Wypełniacz 230x230 (H:210)": {"L": 230, "W": 230, "H": 210, "Waga": 0.0},
     "Wypełniacz 230x230 (H:310)": {"L": 230, "W": 230, "H": 310, "Waga": 0.0},
     "Wypełniacz 230x230 (H:410)": {"L": 230, "W": 230, "H": 410, "Waga": 0.0},
-
-    # Screen 7 & 8 (Kwadratowe małe)
     "Karton 90x90 (H:210)": {"L": 90, "W": 90, "H": 210, "Waga": 0.0},
     "Karton 90x90 (H:310)": {"L": 90, "W": 90, "H": 310, "Waga": 0.0},
     "Karton 90x90 (H:410)": {"L": 90, "W": 90, "H": 410, "Waga": 0.0},
@@ -84,13 +73,12 @@ PUDEŁKA_GROPAK = {
     "Karton 160x160 (H:610)": {"L": 160, "W": 160, "H": 610, "Waga": 0.0},
     "Karton 230x230 (H:510)": {"L": 230, "W": 230, "H": 510, "Waga": 0.0},
     "Karton 230x230 (H:610)": {"L": 230, "W": 230, "H": 610, "Waga": 0.0},
-
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0, "Waga": 0.0}
 }
 
 KOLOR_KARTONU = "#C19A6B"
 
-st.set_page_config(page_title="Gropak Master Pro v6", layout="wide")
+st.set_page_config(page_title="Gropak Master Pro v7", layout="wide")
 st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
 # --- SIDEBAR ---
@@ -112,56 +100,40 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość palety (mm):", 200, 2500, 1600)
 
-# --- ZAAWANSOWANA WIZUALIZACJA 3D ---
+# --- EKSTREMALNIE SOLIDNA WIZUALIZACJA 3D (Bez trójkątów) ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
-    def rysuj_sciane(x_coords, y_coords, z_coords, kolor, show_edges):
+    def rysuj_sciane(x, y, z, kolor, show_edges):
+        # surfaceaxis=0/1/2 tworzy idealnie płaski prostokąt z Scatter3d konturu
         fig.add_trace(go.Scatter3d(
-            x=x_coords, y=y_coords, z=z_coords,
+            x=x, y=y, z=z,
             mode='lines',
-            # fill='toself' usunięte, bo powodowało błędy w Scatter3d w nowszych Plotly
-            # Zamiast tego używamy surfaceaxis w update_traces poniżej, jeśli potrzebne,
-            # ale Scatter3d z samymi liniami jest stabilniejszy.
+            surfaceaxis=0 if len(set(x)) == 1 else (1 if len(set(y)) == 1 else 2),
+            surfacecolor=kolor,
             line=dict(color='black', width=3 if show_edges else 0),
             showlegend=False,
             hoverinfo='skip'
         ))
 
     def dodaj_solidna_bryle(x, y, z, l, w, h, kolor, show_edges=True):
-        # Definiujemy Mesh3d dla solidnego wypełnienia bez diagonalnych linii
-        fig.add_trace(go.Mesh3d(
-            x=[x, x+l, x+l, x, x, x+l, x+l, x],
-            y=[y, y, y+w, y+w, y, y, y+w, y+w],
-            z=[z, z, z, z, z+h, z+h, z+h, z+h],
-            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], # indeksy wierzchołków dla ścian
-            j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5],
-            k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-            opacity=1,
-            color=kolor,
-            flatshading=True, # kluczowe dla płaskich ścian bez cieniowania smoothing
-            lighting=dict(ambient=0.5, diffuse=0.8, roughness=0.9, specular=0.1, fresnel=0.2),
-            lightposition=dict(x=3000, y=3000, z=5000),
-            showlegend=False,
-            hoverinfo='skip'
-        ))
-        
-        # Dodajemy krawędzie Scatter3d dla czystego konturu
-        if show_edges:
-            lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
-            ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
-            lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
-            fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False, hoverinfo='skip'))
+        # Definiujemy 6 ścian jako płaszczyzny Scatter3d (Góra, Dół, Przód, Tył, Lewo, Prawo)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, show_edges)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, show_edges)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, show_edges)
+        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, show_edges)
+        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges)
+        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges)
 
     if is_pallet:
         pallet_color = "#4E342E"
-        # Konstrukcja palety (elementy pełne bez diagonalnych linii)
-        for y_off in [0, 350, 700]: # Płozy
+        # Konstrukcja palety EURO
+        for y_off in [0, 350, 700]: # Płozy dolne
             dodaj_solidna_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False)
-        for x_off in [0, 525, 1050]: # Klocki
+        for x_off in [0, 525, 1050]: # Wsporniki (klocki)
             for y_off in [0, 350, 700]:
                 dodaj_solidna_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False)
-        for y_off in [0, 175, 350, 525, 700]: # Deski wierzch
+        for y_off in [0, 175, 350, 525, 700]: # Deski wierzchnie
             dodaj_solidna_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False)
 
     for b in bloki:
@@ -173,7 +145,6 @@ def rysuj_layout_3d(bloki, is_pallet=False):
                 for iz in range(nz):
                     dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU, show_edges=True)
     
-    # --- DODANIE RAMKI I STYLIZACJI DO WIZUALIZACJI ---
     fig.update_layout(
         scene=dict(
             aspectmode='data',
@@ -182,38 +153,10 @@ def rysuj_layout_3d(bloki, is_pallet=False):
             zaxis=dict(gridcolor="rgb(200, 200, 200)", showbackground=True, backgroundcolor="rgb(240, 240, 240)"),
             camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
         ),
-        margin=dict(l=10, r=10, b=10, t=10), # Małe marginesy wewnątrz ramki
-        paper_bgcolor="white", # Kolor tła "papieru"
+        margin=dict(l=10, r=10, b=10, t=10),
+        paper_bgcolor="white",
         plot_bgcolor="white",
-        # Rysowanie ramki wokół całego obszaru papieru (paper coordinates 0-1)
-        shapes=[dict(
-            type="rect",
-            xref="paper",
-            yref="paper",
-            x0=0,
-            y0=0,
-            x1=1,
-            y1=1,
-            line=dict(
-                color="#e0e0e0", # Jasnoszary kolor ramki
-                width=2,
-            ),
-            # Opcjonalnie: cień pod ramką (efekt uniesienia)
-            fillcolor="rgba(0,0,0,0)", # Przezroczyste wypełnienie
-        )],
-        # Dodanie cienia za pomocą annotations (trik Plotly)
-        annotations=[dict(
-            xref="paper",
-            yref="paper",
-            x=0.5,
-            y=-0.02,
-            text="",
-            showarrow=False,
-            width=fig.layout.width,
-            height=10,
-            bgcolor="rgba(0,0,0,0.03)", # Bardzo delikatny cień na dole
-            bordercolor="rgba(0,0,0,0)",
-        )]
+        shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#e0e0e0", width=2))]
     )
     return fig
 
