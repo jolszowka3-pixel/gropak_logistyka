@@ -1,6 +1,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+import streamlit.components.v1 as components
 
 # --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
@@ -23,7 +24,6 @@ KURIERZY = {
 
 # --- 2. PEŁNA BAZA TWOICH KARTONÓW ---
 PUDEŁKA_GROPAK = {
-    # Seria A-L
     "A11 (595x250x180)": {"L": 595, "W": 250, "H": 180},
     "B12 (595x295x230)": {"L": 595, "W": 295, "H": 230},
     "C13 (595x230x175)": {"L": 595, "W": 230, "H": 175},
@@ -35,8 +35,6 @@ PUDEŁKA_GROPAK = {
     "I19 (455x325x295)": {"L": 455, "W": 325, "H": 295},
     "K20 (485x385x295)": {"L": 485, "W": 385, "H": 295},
     "L21 (485x430x295)": {"L": 485, "W": 430, "H": 295},
-    
-    # Produkty specjalne
     "Karton na wiórka (380x380x240)": {"L": 380, "W": 380, "H": 240},
     "Zbiorczy na papier 620 (390x390x620)": {"L": 390, "W": 390, "H": 620},
     "Zbiorczy na papier 420 (390x390x420)": {"L": 390, "W": 390, "H": 420},
@@ -44,36 +42,34 @@ PUDEŁKA_GROPAK = {
     "Dyspenser 400ka (410x255x180)": {"L": 410, "W": 255, "H": 180},
     "Zbiorczy na dyspenser 200 (365x265x285)": {"L": 365, "W": 265, "H": 285},
     "Zbiorczy na dyspenser 400 (465x245x190)": {"L": 465, "W": 245, "H": 190},
-    
-    # Kartony na folię
-    "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600},
-    "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500},
-    "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220},
     "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500},
-    
-    # Wypełniacze i bazy kwadratowe
-    "Wypełniacz 295x295 (H:410)": {"L": 295, "W": 295, "H": 410},
-    "Wypełniacz 230x230 (H:410)": {"L": 230, "W": 230, "H": 410},
-    "Karton 90x90 (H:210)": {"L": 90, "W": 90, "H": 210},
-    "Karton 90x90 (H:410)": {"L": 90, "W": 90, "H": 410},
-    "Karton 90x90 (H:610)": {"L": 90, "W": 90, "H": 610},
-    "Karton 110x110 (H:310)": {"L": 110, "W": 110, "H": 310},
-    "Karton 110x110 (H:610)": {"L": 110, "W": 110, "H": 610},
-    "Karton 160x160 (H:610)": {"L": 160, "W": 160, "H": 610},
-    "Karton 230x230 (H:610)": {"L": 230, "W": 230, "H": 610},
-    
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0}
 }
 
 KOLOR_KARTONU = "#C19A6B"
-PALLET_H = 144 # Wysokość samej palety EURO
 
-st.set_page_config(page_title="Gropak Master Pro vFinal", layout="wide")
+st.set_page_config(page_title="Gropak - Schemat Załadunku", layout="wide")
+
+# CSS do ukrycia sidebar'u i przycisków podczas drukowania
+st.markdown("""
+    <style>
+    @media print {
+        header, [data-testid="stSidebar"], .stButton {
+            display: none !important;
+        }
+        .main {
+            background-color: white !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("1. Towar")
-    wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
+    wybrane = st.selectbox("Karton:", list(PUDEŁKA_GROPAK.keys()))
     if wybrane == "Własny wymiar...":
         L = st.number_input("Dł (mm)", 10); W = st.number_input("Szer (mm)", 10); H = st.number_input("Wys (mm)", 10)
     else:
@@ -81,15 +77,15 @@ with st.sidebar:
     
     st.divider()
     st.header("2. Metoda")
-    tryb = st.radio("Metoda wysyłki:", ["📦 Paczka Kurierska", "🚛 Paleta EURO (1200x800)"])
+    tryb = st.radio("Tryb:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
 
     if tryb == "📦 Paczka Kurierska":
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 100, 6)
     else:
-        h_max = st.number_input("Maks. wysokość CAŁKOWITA (mm):", 200, 2500, 1600, help="Obejmuje paletę (144mm) + towar.")
+        h_max = st.number_input("Maks. wysokość (mm):", 200, 2500, 1600)
 
-# --- 3. WIZUALIZACJA 3D (NAPRAWIONA) ---
+# --- 3. WIZUALIZACJA 3D (SOLIDNE BRYŁY) ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
@@ -103,25 +99,22 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         ))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        # Definicja 6 płaskich ścian
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border) # Góra
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border) # Dół
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border) # Front
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border) # Tył
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border) # Lewo
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border) # Prawo
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border)
+        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border)
+        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
+        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
 
     if is_pallet:
         pc = "#4E342E"
-        # Konstrukcja palety (od -144 do 0)
-        for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False) # Płozy
+        for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False)
         for x in [0, 525, 1050]:
-            for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False) # Klocki
-        for y in [0, 175, 350, 525, 700]: dodaj_bryle(0, y, -44, 1200, 100, 44, pc, False) # Deski
+            for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False)
+        for y in [0, 175, 350, 525, 700]: dodaj_bryle(0, y, -44, 1200, 100, 44, pc, False)
 
     for b in bloki:
-        x0, y0, z0 = b['pos']
-        dl, sz, wy = b['dims']
+        x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
         nx, ny, nz = b['count']
         for ix in range(nx):
             for iy in range(ny):
@@ -130,12 +123,12 @@ def rysuj_layout_3d(bloki, is_pallet=False):
     
     fig.update_layout(
         scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))),
-        margin=dict(l=10, r=10, b=10, t=10), paper_bgcolor="white",
-        shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#e0e0e0", width=2))]
+        margin=dict(l=0, r=0, b=0, t=0),
+        paper_bgcolor="white"
     )
     return fig
 
-# --- 4. LOGIKA OPTYMALIZACJI ---
+# --- 4. LOGIKA ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -160,9 +153,6 @@ def optymalizuj_paczke(n, L, W, H, k_name):
 
 def optymalizuj_palete_plecakowa(L, W, H, h_max):
     PL, PW = 1200, 800
-    available_h = h_max - PALLET_H # Towar tylko powyżej palety
-    if available_h <= 0: return [], 0
-    
     orient = get_orientations(L, W, H)
     best_total = 0; best_area = 0; best_layout = []
 
@@ -171,25 +161,20 @@ def optymalizuj_palete_plecakowa(L, W, H, h_max):
             for n1 in range(PW // o1[1] + 1):
                 rem_y = PW - (n1 * o1[1])
                 n2 = rem_y // o2[1]
-                
                 nx1, nx2 = PL // o1[0], PL // o2[0]
-                nz1, nz2 = available_h // o1[2], available_h // o2[2]
-                
+                nz1, nz2 = h_max // o1[2], h_max // o2[2]
                 if (nz1 == 0 and n1 > 0) or (nz2 == 0 and n2 > 0): continue
-
                 total = (n1 * nx1 * nz1) + (n2 * nx2 * nz2)
                 area = (n1 * nx1 * o1[0] * o1[1]) + (n2 * nx2 * o2[0] * o2[1])
-
                 if total > best_total or (total == best_total and area > best_area):
-                    best_total = total
-                    best_area = area
+                    best_total = total; best_area = area
                     best_layout = [
                         {'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
                         {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}
                     ]
     return best_layout, best_total
 
-# --- 5. WIDOK ---
+# --- 5. INTERFEJS GŁÓWNY ---
 c1, c2 = st.columns([1, 1.5])
 
 if tryb == "📦 Paczka Kurierska":
@@ -197,26 +182,54 @@ if tryb == "📦 Paczka Kurierska":
     if res:
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
         with c1:
-            st.subheader("🛠️ Instrukcja Pakowania")
-            st.success(f"Spięto **{sztuk} sztuk**")
-            st.write(f"- Ułożenie: {rl}x{rw} mm (H: {rh})")
+            st.subheader("📋 Instrukcja")
+            st.success(f"Razem: {sztuk} szt.")
+            st.write(f"- Ułożenie: {rl}x{rw} mm")
             st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
         with c2: st.plotly_chart(rysuj_layout_3d([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
-    else: st.error("❌ Przekroczono limity kuriera.")
-
-else: # PALETA
+    else: st.error("Nie mieści się!")
+else:
     layout, total = optymalizuj_palete_plecakowa(L, W, H, h_max)
     if total > 0:
         with c1:
             st.subheader("📋 Plan Załadunku")
-            st.success(f"Razem na palecie: **{total} sztuk**")
-            st.write(f"Paleta: {PALLET_H} mm | Towar: {h_max - PALLET_H} mm")
+            st.success(f"Suma na palecie: **{total} sztuk**")
+            st.write(f"Wysokość towaru: {h_max} mm")
             st.divider()
             for i, b in enumerate(layout):
                 s = b['count'][0]*b['count'][1]*b['count'][2]
                 if s > 0:
                     st.write(f"**Sekcja {i+1} ({s} szt.):**")
-                    st.write(f"- Karton: {b['dims'][0]}x{b['dims'][1]} mm (H: {b['dims'][2]})")
+                    st.write(f"- Karton: {b['dims'][0]}x{b['dims'][1]} mm")
                     st.write(f"- Układ: {b['count'][1]} rzędów, {b['count'][2]} warstw.")
         with c2: st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
-    else: st.error("❌ Karton za duży lub za mała wysokość całkowita!")
+
+        # --- SEKCJA DO DRUKU ---
+        st.divider()
+        st.header("📄 KARTA ZAŁADUNKU (DO DRUKU)")
+        st.markdown(f"""
+        **PRODUKT:** {wybrane}  
+        **ŁĄCZNIE NA PALECIE:** {total} SZTUK  
+        **MAKS. WYSOKOŚĆ:** {h_max} mm
+        """)
+        
+        for i, b in enumerate(layout):
+            s = b['count'][0]*b['count'][1]*b['count'][2]
+            if s > 0:
+                st.markdown(f"""
+                ---
+                ### SEKCJA {i+1}
+                * **Ilość sztuk:** {s}
+                * **Ustawienie na palecie:** Bokiem o wymiarze **{b['dims'][0]} mm x {b['dims'][1]} mm**
+                * **Sposób układania:** {b['count'][1]} rzędów (w każdym rzędzie po {b['count'][0]} sztuki)
+                * **Ilość warstw w górę:** {b['count'][2]}
+                """)
+        
+        if st.button("🖨️ Przygotuj do druku"):
+            components.html("""
+                <script>
+                window.print();
+                </script>
+            """, height=0)
+            
+    else: st.error("Nie mieści się!")
