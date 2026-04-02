@@ -44,6 +44,7 @@ PUDEŁKA_GROPAK = {
     "Karton na folię (475x475x505)": {"L": 475, "W": 475, "H": 505},
     "Karton na folię (355x355x605)": {"L": 355, "W": 355, "H": 605},
     "Karton na folię (605x605x505)": {"L": 605, "W": 605, "H": 505},
+    "Karton na folię (305x305x1225)": {"L": 305, "W": 305, "H": 1225},
     "Wypełniacz 295 (300x300x415)": {"L": 300, "W": 300, "H": 415},
     "Karton 90x90 (95x95x615)": {"L": 95, "W": 95, "H": 615},
     "Karton 160x160 (165x165x615)": {"L": 165, "W": 165, "H": 615},
@@ -52,7 +53,7 @@ PUDEŁKA_GROPAK = {
 }
 
 KOLOR_KARTONU = "#C19A6B"
-TOLERANCJA_H = 50  # mm - pozwala "upchnąć" dodatkową warstwę jeśli brakuje niewiele
+TOLERANCJA_H = 50  # 50mm naddatku wysokości (klucz do 64 sztuk A11)
 
 st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: Optymalizacja Wysyłek")
@@ -67,8 +68,8 @@ with st.sidebar:
         p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
     
     st.divider()
-    st.header("2. Parametry")
-    tryb = st.radio("Tryb pracy:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
+    st.header("2. Metoda")
+    tryb = st.radio("Tryb:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
 
     if tryb == "📦 Paczka Kurierska":
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
@@ -76,10 +77,13 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 2000)
 
-# --- 3. WIZUALIZACJA (BEZ TRÓJKĄTÓW I SIATKI) ---
+# --- 3. WIZUALIZACJA (PANCERNA, BEZ TRÓJKĄTÓW I BEZ SIATKI) ---
 def rysuj_layout(bloki, is_pallet=False):
     fig = go.Figure()
     
+    # Mikroskopijna przerwa między kartonami, aby wyeliminować błędy renderowania styku
+    gap = 0.1 
+
     def dodaj_sciane(x, y, z, kolor, border=True, sa=2):
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
@@ -89,27 +93,38 @@ def rysuj_layout(bloki, is_pallet=False):
         ))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        # 6 płaskich ścian
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border, 2)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border, 2)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border, 1)
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border, 1)
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border, 0)
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border, 0)
+        # 6 płaszczyzn budowanych metodą surfaceaxis - czyste, płaskie ściany bez triangulacji
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border, 2) # Góra
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border, 2) # Dół
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border, 1) # Front
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border, 1) # Tył
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border, 0) # Lewo
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border, 0) # Prawo
 
     if is_pallet:
-        pc = "#4E342E" # Drewno palety
-        for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False)
+        pc = "#4E342E" # Ciemne drewno
+        # Płozy i klocki palety rysujemy bez przerw, bo ich orientacja jest stała
+        for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False) # Płozy
         for x in [0, 525, 1050]:
-            for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False)
-        for y in [0, 175, 350, 525, 700]: dodaj_bryle(0, y, -44, 1200, 100, 44, pc, False)
+            for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False) # Klocki
+        for y in [0, 175, 350, 525, 700]: dodaj_bryle(0, y, -44, 1200, 100, 44, pc, False) # Deski
 
     for b in bloki:
         x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
         for ix in range(b['count'][0]):
             for iy in range(b['count'][1]):
                 for iz in range(b['count'][2]):
-                    dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, KOLOR_KARTONU)
+                    # Aplikujemy mikroszczelinę podczas rysowania pudełek
+                    cx = x0 + ix*dl + gap
+                    cy = y0 + iy*sz + gap
+                    cz = z0 + iz*wy + gap
+                    cdl = dl - 2*gap
+                    csz = sz - 2*gap
+                    cwy = wy - 2*gap
+                    
+                    # Rysujemy pudełko z naddatkiem wolnej przestrzeni
+                    if cdl > 0 and csz > 0 and cwy > 0:
+                        dodaj_bryle(cx, cy, cz, cdl, csz, cwy, KOLOR_KARTONU)
     
     hide_axis = dict(showbackground=False, visible=False)
     fig.update_layout(
@@ -122,7 +137,7 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA OBLICZEŃ ---
+# --- 4. LOGIKA OBLICZEŃ (STABILNA I MAKSYMALNA) ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -149,28 +164,35 @@ def optymalizuj_palete_maksymalna(L, W, H, h_max):
     PL, PW = 1200, 800
     orient = get_orientations(L, W, H)
     best_total = 0
+    best_footprint_score = 0
     best_layout = []
 
+    # Szukamy absolutnego maksimum sztuk sprawdzając każdą możliwą orientację warstwy
     for o1 in orient:
         for o2 in orient:
             for n1 in range(PW // o1[1] + 1):
                 rem_y = PW - n1*o1[1]
                 n2 = rem_y // o2[1]
-                nx1, nx2 = PL // o1[0], PL // o2[0]
                 
-                # Zastosowanie tolerancji wysokości dla maksymalnego upchnięcia
+                # Ilość sztuk w JEDNEJ warstwie dla obu orientacji
+                layer_n1 = (PL // o1[0]) * n1
+                layer_n2 = (PL // o2[0]) * n2
+                
+                # Warstwy (nz) - zastosowanie tolerancji wysokości dla maksymalnego upchnięcia
                 nz1 = (h_max + TOLERANCJA_H) // o1[2]
                 nz2 = (h_max + TOLERANCJA_H) // o2[2]
                 
-                s1 = (nx1 * n1 * nz1) if nz1 > 0 else 0
-                s2 = (nx2 * n2 * nz2) if nz2 > 0 else 0
-                total = s1 + s2
-
-                if total > best_total:
+                total = (layer_n1 * nz1) + (layer_n2 * nz2)
+                # Wynik pokrycia podłogi (mm2) dla stabilizacji przy takim samym totalu
+                footprint = (layer_n1 * o1[0] * o1[1]) + (layer_n2 * o2[0] * o2[1])
+                
+                # Wybieramy układ, który daje WIĘCEJ SZTUK TOTALNIE LUB lepiej kryje podłogę
+                if total > best_total or (total == best_total and footprint > best_footprint_score):
                     best_total = total
+                    best_footprint_score = footprint
                     best_layout = [
-                        {'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
-                        {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}
+                        {'pos': (0, 0, 0), 'dims': o1, 'count': (int(PL // o1[0]), int(n1), int(nz1))},
+                        {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(PL // o2[0]), int(n2), int(nz2))}
                     ]
     return best_layout, best_total
 
@@ -182,15 +204,13 @@ if tryb == "📦 Paczka Kurierska":
     if res:
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
         with c1:
-            st.subheader("📋 Instrukcja Paczki")
-            st.success(f"Razem: {sztuk} sztuk")
+            st.subheader("📋 Instrukcja")
+            st.success(f"Razem: {sztuk} szt.")
             st.write(f"- Ułożenie kartonu: {rl}x{rw} mm")
             st.write(f"- Układ: {nx} rz. x {ny} kol. x {nz} warstw")
-            st.info(f"Wymiar finalny: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
-        with c2:
-            st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
-    else:
-        st.error("Nie mieści się w limitach tego kuriera!")
+            st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
+        with c2: st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
+    else: st.error("Nie mieści się w limitach przewoźnika!")
 
 else:
     layout, total = optymalizuj_palete_maksymalna(L, W, H, h_max)
@@ -198,17 +218,12 @@ else:
         with c1:
             st.subheader("📋 Plan Palety")
             st.success(f"Suma: **{total} sztuk**")
-            # Obliczenie rzeczywistej wysokości ładunku
-            real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0])
-            st.write(f"Rzeczywista wys. ładunku: {real_h} mm")
             st.divider()
             for i, b in enumerate(layout):
                 s = b['count'][0]*b['count'][1]*b['count'][2]
                 if s > 0:
                     st.write(f"**Sekcja {i+1}** ({s} szt.):")
-                    st.write(f"- Orientacja: {b['dims'][0]}x{b['dims'][1]} mm")
-                    st.write(f"- Układ: {b['count'][1]} rz. x {b['count'][0]} szt. x {b['count'][2]} warstw")
-        with c2:
-            st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
-    else:
-        st.error("Karton za duży na paletę EURO!")
+                    st.write(f"- Karton bokiem: {b['dims'][0]}x{b['dims'][1]} mm")
+                    st.write(f"- Układ: {b['count'][1]} rz. x {b['count'][0]} szt. ({b['count'][2]} warstw)")
+        with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
+    else: st.error("Nie mieści się!")
