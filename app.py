@@ -45,9 +45,7 @@ PUDEŁKA_GROPAK = {
     "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500},
     "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600},
     "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500},
-    "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220},
     "Wypełniacz 295x295 (H:410)": {"L": 295, "W": 295, "H": 410},
-    "Wypełniacz 230x230 (H:410)": {"L": 230, "W": 230, "H": 410},
     "Karton 90x90 (H:610)": {"L": 90, "W": 90, "H": 610},
     "Karton 160x160 (H:610)": {"L": 160, "W": 160, "H": 610},
     "Karton 230x230 (H:610)": {"L": 230, "W": 230, "H": 610},
@@ -56,14 +54,17 @@ PUDEŁKA_GROPAK = {
 
 KOLOR_KARTONU = "#C19A6B"
 
-st.set_page_config(page_title="Gropak - System Optymalizacji", layout="wide")
+st.set_page_config(page_title="Gropak - System Wysyłek", layout="wide")
 
-# CSS do drukowania - wymusza widoczność grafik
+# CSS: Wymuszenie drukowania grafik i tła, ukrycie śmieci z menu Streamlit
 st.markdown("""
     <style>
     @media print {
-        header, [data-testid="stSidebar"], .stButton, [data-testid="stToolbar"] { display: none !important; }
+        header, [data-testid="stSidebar"], .stButton, [data-testid="stToolbar"], footer {
+            display: none !important;
+        }
         .main { background-color: white !important; }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         .stPlotlyChart { visibility: visible !important; display: block !important; }
     }
     </style>
@@ -89,12 +90,11 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 1600)
 
-# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW (ONLY SCATTER3D SURFACES) ---
+# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW (PANCERNA) ---
 def rysuj_layout(bloki, is_pallet=False, view_type="3d"):
     fig = go.Figure()
     
     def dodaj_sciane(x, y, z, kolor, border=True):
-        # Scatter3d z surfaceaxis to jedyny sposób na 100% płaskie ściany bez skosów
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
             surfaceaxis=0 if len(set(x)) == 1 else (1 if len(set(y)) == 1 else 2),
@@ -104,17 +104,16 @@ def rysuj_layout(bloki, is_pallet=False, view_type="3d"):
         ))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        # Góra i Dół
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border)
-        # Boki
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border)
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border)
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
+        # 6 płaskich prostokątów Scatter3d - zero Mesh3d = zero trójkątów
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border) # Góra
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border) # Dół
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border) # Front
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border) # Tył
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border) # Lewo
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border) # Prawo
 
     if is_pallet:
-        pc = "#4E342E" # Ciemne drewno
+        pc = "#4E342E" # Drewno
         for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False)
         for x in [0, 525, 1050]:
             for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False)
@@ -219,7 +218,7 @@ else:
         st.header("📄 KARTA ZAŁADUNKU DLA MAGAZYNU")
         st.markdown(f"### **PRODUKT:** {wybrane} | **SUMA:** {total} SZTUK")
         
-        # Klucz do druku: staticPlot=True zamienia wykres w obrazek
+        # staticPlot=True zamienia wykresy w statyczne obrazy, które przeglądarka widzi przy drukowaniu
         col_t, col_f, col_s = st.columns(3)
         with col_t:
             st.write("**RZUT Z GÓRY**")
@@ -231,12 +230,17 @@ else:
             st.write("**RZUT Z BOKU**")
             st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="side"), use_container_width=True, config={'staticPlot': True})
         
-        st.subheader("📝 INSTRUKCJA")
+        st.subheader("📝 INSTRUKCJA DLA MAGAZYNIERA")
         for i, b in enumerate(layout):
             s = b['count'][0]*b['count'][1]*b['count'][2]
             if s > 0:
-                st.markdown(f"**SEKCJA {i+1}:** {s} szt. Połóż karton na boku **{b['dims'][0]}x{b['dims'][1]}**. Ułóż {b['count'][1]} rzędów po {b['count'][0]} szt. w {b['count'][2]} warstwach.")
+                st.markdown(f"**SEKCJA {i+1}:** {s} sztuk. Kładziemy na boku **{b['dims'][0]}x{b['dims'][1]}**. Robimy {b['count'][1]} rzędów, w górę {b['count'][2]} warstw.")
 
+        # Przycisk z opóźnieniem, aby Plotly zdążyło się przełączyć w tryb obrazu przed otwarciem okna druku
         if st.button("🖨️ DRUKUJ KARTĘ ZAŁADUNKU"):
-            components.html("<script>window.print();</script>", height=0)
+            components.html("""
+                <script>
+                setTimeout(function() { window.print(); }, 500);
+                </script>
+            """, height=0)
     else: st.error("Nie mieści się!")
