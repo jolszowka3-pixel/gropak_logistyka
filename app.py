@@ -50,7 +50,7 @@ PUDEŁKA_GROPAK = {
 }
 
 KOLOR_KARTONU = "#C19A6B"
-TOLERANCJA_H = 50  # mm - naddatek dla rzeczywistego upakowania (klucz do 64 sztuk A11)
+TOLERANCJA_H = 50 # Klucz do 64 sztuk A11
 
 st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: Optymalizacja Wysyłek")
@@ -58,7 +58,7 @@ st.title("📦 Gropak: Optymalizacja Wysyłek")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("1. Towar")
-    wybrane = st.selectbox("Karton:", list(PUDEŁKA_GROPAK.keys()))
+    wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
     if wybrane == "Własny wymiar...":
         L = st.number_input("Dł zew (mm)", 10); W = st.number_input("Szer zew (mm)", 10); H = st.number_input("Wys zew (mm)", 10)
     else:
@@ -67,49 +67,49 @@ with st.sidebar:
     st.divider()
     st.header("2. Parametry")
     tryb = st.radio("Metoda:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
+
     if tryb == "📦 Paczka Kurierska":
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 2000)
 
-# --- 3. WIZUALIZACJA (PANCERNA: ZERO TRÓJKĄTÓW, ZERO SIATKI) ---
+# --- 3. WIZUALIZACJA (PANCERNA, SOLIDNA, BEZ TRÓJKĄTÓW) ---
 def rysuj_layout(bloki, is_pallet=False):
     fig = go.Figure()
     
     def dodaj_sciane(x, y, z, kolor, sa):
-        # surfaceaxis rysuje wypełnienie, line width=0 usuwa trójkąty na 100%
+        # opacity=1 i line_width=0 daje efekt pełnej, solidnej bryły bez skosów
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
             surfaceaxis=sa, surfacecolor=kolor,
-            line=dict(width=0), # TO USUWA TRÓJKĄTY
+            opacity=1, # KARTONY SĄ TERAZ PEŁNE (NIEPRZEZROCZYSTE)
+            line=dict(width=0), 
             showlegend=False, hoverinfo='skip'
         ))
 
     def dodaj_krawedzie(x, y, z, l, w, h):
-        # Rysowanie szkieletu pudełka jako jednej linii
         lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
         ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
         lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
         fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False, hoverinfo='skip'))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        # 6 płaszczyzn bez obrysu wewnętrznego
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, 2) # Góra
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, 2) # Dół
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, 1) # Przód
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, 1) # Tył
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, 0) # Lewo
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, 0) # Prawo
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, 2)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, 2)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, 1)
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, 1)
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
         if border:
             dodaj_krawedzie(x, y, z, l, w, h)
 
     if is_pallet:
-        pc = "#4E342E" # Drewno palety
-        for y_off in [0, 350, 700]: dodaj_bryle(0, y_off, -144, 1200, 100, 22, pc, False) # Płozy
+        pc = "#4E342E"
+        for y_off in [0, 350, 700]: dodaj_bryle(0, y_off, -144, 1200, 100, 22, pc, False)
         for x_off in [0, 525, 1050]:
-            for y_off in [0, 350, 700]: dodaj_bryle(x_off, y_off, -122, 150, 100, 78, pc, False) # Klocki
-        for y_off in [0, 175, 350, 525, 700]: dodaj_bryle(0, y_off, -44, 1200, 100, 44, pc, False) # Deski
+            for y_off in [0, 350, 700]: dodaj_bryle(x_off, y_off, -122, 150, 100, 78, pc, False)
+        for y_off in [0, 175, 350, 525, 700]: dodaj_bryle(0, y_off, -44, 1200, 100, 44, pc, False)
 
     for b in bloki:
         x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
@@ -118,7 +118,6 @@ def rysuj_layout(bloki, is_pallet=False):
                 for iz in range(b['count'][2]):
                     dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, KOLOR_KARTONU)
     
-    # Usuwanie siatki i osi
     hide = dict(showbackground=False, visible=False)
     fig.update_layout(
         scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.8, y=1.8, z=1.5)), xaxis=hide, yaxis=hide, zaxis=hide),
@@ -127,7 +126,7 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA (EKSTREMALNA: POZWALAJĄCA NA 64 SZT A11) ---
+# --- 4. LOGIKA ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -154,25 +153,19 @@ def optymalizuj_palete_maksymalna(L, W, H, h_max):
     PL, PW = 1200, 800
     orient = get_orientations(L, W, H)
     best_total = 0; best_layout = []
-
     for o1 in orient:
         for o2 in orient:
             for n1 in range(PW // o1[1] + 1):
                 rem_y = PW - n1*o1[1]
                 n2 = rem_y // o2[1]
                 nx1, nx2 = PL // o1[0], PL // o2[0]
-                
-                # Zastosowanie tolerancji wysokości (h_max + 50mm)
                 nz1 = (h_max + TOLERANCJA_H) // o1[2]
                 nz2 = (h_max + TOLERANCJA_H) // o2[2]
-                
                 total = (nx1 * n1 * nz1) + (nx2 * n2 * nz2)
                 if total > best_total:
                     best_total = total
-                    best_layout = [
-                        {'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
-                        {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}
-                    ]
+                    best_layout = [{'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
+                                   {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}]
     return best_layout, best_total
 
 # --- 5. INTERFEJS ---
@@ -195,11 +188,9 @@ else:
             st.subheader("📋 Plan Palety")
             st.success(f"Suma: **{total} sztuk**")
             real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0])
-            st.write(f"Wysokość ładunku: {real_h} mm")
+            st.write(f"Wysokość towaru: {real_h} mm")
             st.divider()
             for i, b in enumerate(layout):
                 s = b['count'][0]*b['count'][1]*b['count'][2]
-                if s > 0:
-                    st.write(f"**Sekcja {i+1}** ({s} szt.): {b['dims'][0]}x{b['dims'][1]} mm")
+                if s > 0: st.write(f"**Sekcja {i+1}** ({s} szt.): {b['dims'][0]}x{b['dims'][1]} mm")
         with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
-    else: st.error("Nie mieści się!")
