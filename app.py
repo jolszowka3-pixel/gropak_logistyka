@@ -21,34 +21,42 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. PEŁNA BAZA TWOICH KARTONÓW ---
+# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Zaktualizowana: wymiary zewnętrzne = wew + 5mm) ---
 PUDEŁKA_GROPAK = {
-    "A11 (595x250x180)": {"L": 595, "W": 250, "H": 180},
-    "B12 (595x295x230)": {"L": 595, "W": 295, "H": 230},
-    "C13 (595x230x175)": {"L": 595, "W": 230, "H": 175},
-    "D14 (595x280x205)": {"L": 595, "W": 280, "H": 205},
-    "E15 (595x280x245)": {"L": 595, "W": 280, "H": 245},
-    "F16 (595x360x250)": {"L": 595, "W": 360, "H": 250},
-    "G17 (595x360x265)": {"L": 595, "W": 360, "H": 265},
-    "H18 (595x375x295)": {"L": 595, "W": 375, "H": 295},
-    "I19 (455x325x295)": {"L": 455, "W": 325, "H": 295},
-    "K20 (485x385x295)": {"L": 485, "W": 385, "H": 295},
-    "L21 (485x430x295)": {"L": 485, "W": 430, "H": 295},
-    "Karton na wiórka (380x380x240)": {"L": 380, "W": 380, "H": 240},
-    "Zbiorczy papier 620 (390x390x620)": {"L": 390, "W": 390, "H": 620},
-    "Zbiorczy papier 420 (390x390x420)": {"L": 390, "W": 390, "H": 420},
-    "Dyspenser 200ka (210x350x275)": {"L": 210, "W": 350, "H": 275},
-    "Dyspenser 400ka (410x255x180)": {"L": 410, "W": 255, "H": 180},
-    "Zbiorczy dyspenser 200ka (365x265x285)": {"L": 365, "W": 265, "H": 285},
-    "Zbiorczy dyspenser 400ka (465x245x190)": {"L": 465, "W": 245, "H": 190},
-    "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500},
-    "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600},
-    "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500},
-    "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220},
-    "Wypełniacz 295x295 (H:410)": {"L": 295, "W": 295, "H": 410},
-    "Karton 90x90 (H:610)": {"L": 90, "W": 90, "H": 610},
-    "Karton 160x160 (H:610)": {"L": 160, "W": 160, "H": 610},
-    "Karton 230x230 (H:610)": {"L": 230, "W": 230, "H": 610},
+    # Seria A-L (Wymiary wew + 5mm)
+    "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
+    "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
+    "C13 (600x235x180)": {"L": 600, "W": 235, "H": 180},
+    "D14 (600x285x210)": {"L": 600, "W": 285, "H": 210},
+    "E15 (600x285x250)": {"L": 600, "W": 285, "H": 250},
+    "F16 (600x365x255)": {"L": 600, "W": 365, "H": 255},
+    "G17 (600x365x270)": {"L": 600, "W": 365, "H": 270},
+    "H18 (600x380x300)": {"L": 600, "W": 380, "H": 300},
+    "I19 (460x330x300)": {"L": 460, "W": 330, "H": 300},
+    "K20 (490x390x300)": {"L": 490, "W": 390, "H": 300},
+    "L21 (490x435x300)": {"L": 490, "W": 435, "H": 300},
+    
+    # Produkty specjalne i dyspensery
+    "Karton na wiórka (385x385x245)": {"L": 385, "W": 385, "H": 245},
+    "Zbiorczy papier 625 (395x395x625)": {"L": 395, "W": 395, "H": 625},
+    "Zbiorczy papier 425 (395x395x425)": {"L": 395, "W": 395, "H": 425},
+    "Dyspenser 200ka (215x355x280)": {"L": 215, "W": 355, "H": 280},
+    "Dyspenser 400ka (415x260x185)": {"L": 415, "W": 260, "H": 185},
+    "Zbiorczy dyspenser 200 (370x270x290)": {"L": 370, "W": 270, "H": 290},
+    "Zbiorczy dyspenser 400 (470x250x195)": {"L": 470, "W": 250, "H": 195},
+    
+    # Kartony na folię
+    "Karton na folię (475x475x505)": {"L": 475, "W": 475, "H": 505},
+    "Karton na folię (355x355x605)": {"L": 355, "W": 355, "H": 605},
+    "Karton na folię (605x605x505)": {"L": 605, "W": 605, "H": 505},
+    "Karton na folię (305x305x1225)": {"L": 305, "W": 305, "H": 1225},
+    
+    # Wypełniacze i bazy kwadratowe
+    "Wypełniacz 295 (300x300x415)": {"L": 300, "W": 300, "H": 415},
+    "Karton 90x90 (95x95x615)": {"L": 95, "W": 95, "H": 615},
+    "Karton 160x160 (165x165x615)": {"L": 165, "W": 165, "H": 615},
+    "Karton 230x230 (235x235x615)": {"L": 235, "W": 235, "H": 615},
+    
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0}
 }
 
@@ -59,9 +67,9 @@ st.title("📦 Gropak: Optymalizacja Wysyłek")
 
 with st.sidebar:
     st.header("1. Wybór towaru")
-    wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
+    wybrane = st.selectbox("Wybierz karton (Wymiary Zew.):", list(PUDEŁKA_GROPAK.keys()))
     if wybrane == "Własny wymiar...":
-        L = st.number_input("Dł (mm)", 10); W = st.number_input("Szer (mm)", 10); H = st.number_input("Wys (mm)", 10)
+        L = st.number_input("Dł zew (mm)", 10); W = st.number_input("Szer zew (mm)", 10); H = st.number_input("Wys zew (mm)", 10)
     else:
         p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
     
@@ -75,27 +83,25 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 1600)
 
-# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW (PANCERNA) ---
+# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW I BEZ SIATKI ---
 def rysuj_layout(bloki, is_pallet=False):
     fig = go.Figure()
     
-    def dodaj_sciane(x, y, z, kolor, border=True):
+    def dodaj_sciane(x, y, z, kolor, border=True, sa=2):
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
-            surfaceaxis=0 if len(set(x)) == 1 else (1 if len(set(y)) == 1 else 2),
-            surfacecolor=kolor,
+            surfaceaxis=sa, surfacecolor=kolor,
             line=dict(color='black', width=2.5 if border else 0),
             showlegend=False, hoverinfo='skip'
         ))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        # 6 płaszczyzn - brak Mesh3d = brak trójkątów
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border)
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border)
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border, 2) # Góra
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border, 2) # Dół
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border, 1) # Front
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border, 1) # Tył
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border, 0) # Lewo
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border, 0) # Prawo
 
     if is_pallet:
         pc = "#4E342E"
@@ -111,29 +117,19 @@ def rysuj_layout(bloki, is_pallet=False):
                 for iz in range(b['count'][2]):
                     dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, KOLOR_KARTONU)
     
-    # Styl do ukrycia osi (siatki)
-    hide_axis = dict(
-        showbackground=False,
-        visible=False
-    )
+    hide_axis = dict(showbackground=False, visible=False)
 
     fig.update_layout(
         scene=dict(
-            aspectmode='data', 
-            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5)),
-            # UKRYWANIE SIATKI I OSI
-            xaxis=hide_axis,
-            yaxis=hide_axis,
-            zaxis=hide_axis
+            aspectmode='data', camera=dict(eye=dict(x=1.8, y=1.8, z=1.5)),
+            xaxis=hide_axis, yaxis=hide_axis, zaxis=hide_axis
         ),
-        margin=dict(l=10, r=10, b=10, t=10),
-        paper_bgcolor="white",
-        # Ramka wizualizacji
+        margin=dict(l=10, r=10, b=10, t=10), paper_bgcolor="white",
         shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#444", width=3))]
     )
     return fig
 
-# --- 4. LOGIKA (STABILNA ORIENTACJA) ---
+# --- 4. LOGIKA ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -159,31 +155,22 @@ def optymalizuj_paczke(n, L, W, H, k_name):
 def optymalizuj_palete_stabilna(L, W, H, h_max):
     PL, PW = 1200, 800
     orient = get_orientations(L, W, H)
-    best_total = 0; best_footprint_score = 0; best_layout = []
+    best_total = 0; best_footprint = 0; best_layout = []
 
-    # Szukamy najlepszej podłogi (2D), a potem mnożymy przez warstwy
     for o1 in orient:
         for o2 in orient:
             for n1 in range(PW // o1[1] + 1):
                 rem_y = PW - n1*o1[1]
                 n2 = rem_y // o2[1]
-                
-                # Ilość sztuk w JEDNEJ warstwie
                 layer_n1 = (PL // o1[0]) * n1
                 layer_n2 = (PL // o2[0]) * n2
-                
-                # Warstwy
                 nz1 = h_max // o1[2]
                 nz2 = h_max // o2[2]
-                
                 total = (layer_n1 * nz1) + (layer_n2 * nz2)
-                # Wynik pokrycia podłogi (mm2) dla stabilizacji
                 footprint = (layer_n1 * o1[0] * o1[1]) + (layer_n2 * o2[0] * o2[1])
                 
-                # Jeśli total jest lepszy LUB taki sam, ale lepiej kryje podłogę
-                if total > best_total or (total == best_total and footprint > best_footprint_score):
-                    best_total = total
-                    best_footprint_score = footprint
+                if total > best_total or (total == best_total and footprint > best_footprint):
+                    best_total = total; best_footprint = footprint
                     best_layout = [
                         {'pos': (0, 0, 0), 'dims': o1, 'count': (int(PL // o1[0]), int(n1), int(nz1))},
                         {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(PL // o2[0]), int(n2), int(nz2))}
@@ -215,8 +202,7 @@ else:
                 s = b['count'][0]*b['count'][1]*b['count'][2]
                 if s > 0:
                     st.write(f"**Sekcja {i+1}** ({s} szt.):")
-                    st.write(f"- Bok: {b['dims'][0]}x{b['dims'][1]} mm")
-                    st.write(f"- Układ: {b['count'][1]} rz. x {b['count'][0]} szt.")
-                    st.write(f"- Warstw: {b['count'][2]}")
+                    st.write(f"- Karton bokiem: {b['dims'][0]}x{b['dims'][1]} mm")
+                    st.write(f"- Układ: {b['count'][1]} rz. x {b['count'][0]} szt. ({b['count'][2]} warstw)")
         with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
     else: st.error("Nie mieści się!")
