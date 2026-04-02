@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
+import numpy as np  # <-- TA LINIA NAPRAWIA BŁĄD
 
 # --- 1. BAZA KURIERÓW ---
 KURIERZY = {
@@ -37,7 +38,7 @@ KOLOR_KARTONU = "#C19A6B"
 TOLERANCJA_H = 50 
 MIX_COLORS = ["#C19A6B", "#8D6E63", "#78909C", "#5D4037", "#455A64", "#D7CCC8", "#A1887F", "#37474F"]
 
-st.set_page_config(page_title="Gropak Master Pro - Final Mix", layout="wide")
+st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
 # --- SIDEBAR ---
@@ -81,12 +82,14 @@ def rysuj_layout(bloki, is_pallet=False, title=""):
         dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
         dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
         if border: dodaj_krawedzie(x, y, z, l, w, h)
+    
     if is_pallet:
         pc = "#4E342E"
         for y_off in [0, 350, 700]: dodaj_bryle(0, y_off, -144, 1200, 100, 22, pc, False)
         for x_off in [0, 525, 1050]:
             for y_off in [0, 350, 700]: dodaj_bryle(x_off, y_off, -122, 150, 100, 78, pc, False)
         for y_off in [0, 175, 350, 525, 700]: dodaj_bryle(0, y_off, -44, 1200, 100, 44, pc, False)
+    
     for b in bloki:
         x0, y0, z0 = b['pos']; dl, sz, wy = b['dims']; kol = b.get('color', KOLOR_KARTONU)
         if 'count' in b:
@@ -94,6 +97,7 @@ def rysuj_layout(bloki, is_pallet=False, title=""):
                 for iy in range(b['count'][1]):
                     for iz in range(b['count'][2]): dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, kol)
         else: dodaj_bryle(x0, y0, z0, dl, sz, wy, kol)
+    
     hide = dict(showbackground=False, visible=False)
     fig.update_layout(scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.6, y=1.6, z=1.3)), xaxis=hide, yaxis=hide, zaxis=hide), margin=dict(l=5, r=5, b=5, t=30), paper_bgcolor="white", title=title, shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#444", width=3))])
     return fig
@@ -103,7 +107,6 @@ def get_orientations(L, W, H): return list({(L, W, H), (L, H, W), (W, L, H), (W,
 
 def optymalizuj_mix_profesjonalny(items_to_pack, h_max):
     pallets = []
-    # KROK 1: Sortowanie po fundamentach (L*W)
     items_to_pack.sort(key=lambda x: (x['dims'][0]*x['dims'][1]), reverse=True)
     
     current_pallet_blocks = []
@@ -114,9 +117,8 @@ def optymalizuj_mix_profesjonalny(items_to_pack, h_max):
             pallets.append(current_pallet_blocks)
             current_pallet_blocks = []; curr_z = 0
             
-        # Tworzymy "Wirtualną Podłogę" dla nowej warstwy
         layer_h = 0
-        floor_occupied = np.zeros((120, 80)) # Siatka 10mm dla precyzji
+        floor_occupied = np.zeros((120, 80)) # Siatka 10mm
         
         item_idx = 0
         while item_idx < len(items_to_pack):
@@ -124,19 +126,15 @@ def optymalizuj_mix_profesjonalny(items_to_pack, h_max):
             if item['qty'] <= 0:
                 items_to_pack.pop(item_idx); continue
             
-            # Szukamy najlepszej orientacji dla tego towaru w obecnej warstwie
             best_fit = None
             orients = get_orientations(*item['dims'])
-            # Priorytet: Orientacja dająca najwięcej sztuk na szerokości palety (800mm)
             orients.sort(key=lambda o: (800 // o[1]), reverse=True)
             
             for o in orients:
                 l, w, h = o
-                # Szukamy wolnego prostokąta w siatce warstwy
                 for ix in range(120 - int(l//10) + 1):
                     for iy in range(80 - int(w//10) + 1):
                         if not np.any(floor_occupied[ix:ix+int(l//10), iy:iy+int(w//10)]):
-                            # Mamy miejsce! Obliczamy ile warstw tego samego towaru w górę
                             max_z_layers = (h_max + TOLERANCJA_H - curr_z) // h
                             if max_z_layers > 0:
                                 best_fit = {'pos': (ix*10, iy*10, curr_z), 'dims': (l, w, h), 'nz': int(max_z_layers)}
@@ -157,7 +155,7 @@ def optymalizuj_mix_profesjonalny(items_to_pack, h_max):
             else:
                 item_idx += 1
         
-        if layer_h == 0: # Nic nie weszło w warstwę
+        if layer_h == 0:
             if items_to_pack: pallets.append(current_pallet_blocks); current_pallet_blocks = []; curr_z = 0
             else: break
         else:
@@ -182,7 +180,6 @@ if tryb == "🏗️ Mix Towarowy":
                 st.info(f"### Paleta {idx+1}")
                 st.write(f"Wysokość: **{max([b['pos'][2]+b['dims'][2]*b['count'][2] for b in p_blocks])} mm**")
             with c2: st.plotly_chart(rysuj_layout(p_blocks, is_pallet=True, title=f"Paleta {idx+1}"), use_container_width=True)
-    else: st.info("Podaj ilości towaru.")
 
 elif tryb == "🚛 Paleta (Jeden typ)":
     def optymalizuj_palete_maksymalna(L, W, H, h_max):
