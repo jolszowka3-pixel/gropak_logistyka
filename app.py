@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
+# --- 1. BAZA KURIERÓW ---
 KURIERZY = {
     "DPD (Standard)": {"max_L": 1750, "max_G": 3000, "max_W": 31.5},
     "DHL (Standard)": {"max_L": 1200, "max_G": 3000, "max_W": 31.5},
@@ -12,7 +12,7 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Zew: wew + 5mm) ---
+# --- 2. BAZA KARTONÓW (Wymiary Zew: wew + 5mm) ---
 PUDEŁKA_GROPAK = {
     "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
     "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
@@ -38,27 +38,16 @@ KOLOR_KARTONU = "#C19A6B"
 TOLERANCJA_H = 50 
 MIX_PALETTE_COLORS = ["#C19A6B", "#8D6E63", "#78909C", "#5D4037", "#A1887F", "#455A64"]
 
-st.set_page_config(page_title="Gropak Master Pro - MultiPallet", layout="wide")
+st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("1. Tryb Pracy")
     tryb = st.radio("Metoda:", ["📦 Paczka Kurierska", "🚛 Paleta (Jeden typ)", "🏗️ Mix Towarowy"])
-    
     st.divider()
-    if tryb == "📦 Paczka Kurierska":
-        wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
-        L, W, H = PUDEŁKA_GROPAK[wybrane]["L"], PUDEŁKA_GROPAK[wybrane]["W"], PUDEŁKA_GROPAK[wybrane]["H"]
-        kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
-        sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
     
-    elif tryb == "🚛 Paleta (Jeden typ)":
-        wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
-        L, W, H = PUDEŁKA_GROPAK[wybrane]["L"], PUDEŁKA_GROPAK[wybrane]["W"], PUDEŁKA_GROPAK[wybrane]["H"]
-        h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 2000)
-    
-    else: # MIX TOWAROWY
+    if tryb == "🏗️ Mix Towarowy":
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 2000)
         st.subheader("Lista do zapakowania")
         df_input = st.data_editor(
@@ -66,15 +55,22 @@ with st.sidebar:
             column_config={"Karton": st.column_config.TextColumn(disabled=True), "Sztuk": st.column_config.NumberColumn(min_value=0, step=1)},
             hide_index=True
         )
+    else:
+        wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
+        L, W, H = PUDEŁKA_GROPAK[wybrane]["L"], PUDEŁKA_GROPAK[wybrane]["W"], PUDEŁKA_GROPAK[wybrane]["H"]
+        if tryb == "📦 Paczka Kurierska":
+            kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
+            sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
+        else:
+            h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 2000)
 
 # --- 3. WIZUALIZACJA (PANCERNA: ZERO TRÓJKĄTÓW, ZERO SIATKI) ---
-def rysuj_layout(bloki, is_pallet=False, title="Paleta"):
+def rysuj_layout(bloki, is_pallet=False, title=""):
     fig = go.Figure()
     
-    def dodaj_sciane(x, y, z, l, w, h, kolor, sa):
+    def dodaj_sciane(x, y, z, kolor, sa):
         fig.add_trace(go.Scatter3d(
-            x=x, y=y, z=z, mode='lines',
-            surfaceaxis=sa, surfacecolor=kolor,
+            x=x, y=y, z=z, mode='lines', surfaceaxis=sa, surfacecolor=kolor,
             opacity=1, line=dict(width=0), showlegend=False, hoverinfo='skip'
         ))
 
@@ -85,12 +81,12 @@ def rysuj_layout(bloki, is_pallet=False, title="Paleta"):
         fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False, hoverinfo='skip'))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], l, w, h, kolor, 2)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], l, w, h, kolor, 2)
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], l, w, h, kolor, 1)
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], l, w, h, kolor, 1)
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], l, w, h, kolor, 0)
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], l, w, h, kolor, 0)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, 2)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, 2)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, 1)
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, 1)
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
         if border: dodaj_krawedzie(x, y, z, l, w, h)
 
     if is_pallet:
@@ -104,7 +100,6 @@ def rysuj_layout(bloki, is_pallet=False, title="Paleta"):
         x0, y0, z0 = b['pos']
         dl, sz, wy = b['dims']
         kol = b.get('color', KOLOR_KARTONU)
-        # Obsługa bloków z ilością (single pallet) i pojedynczych (mixed pallet)
         if 'count' in b:
             for ix in range(b['count'][0]):
                 for iy in range(b['count'][1]):
@@ -115,7 +110,7 @@ def rysuj_layout(bloki, is_pallet=False, title="Paleta"):
     
     hide = dict(showbackground=False, visible=False)
     fig.update_layout(
-        scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.5, y=1.5, z=1.2)), xaxis=hide, yaxis=hide, zaxis=hide),
+        scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.6, y=1.6, z=1.3)), xaxis=hide, yaxis=hide, zaxis=hide),
         margin=dict(l=5, r=5, b=5, t=30), paper_bgcolor="white", title=title,
         shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#444", width=3))]
     )
@@ -124,6 +119,25 @@ def rysuj_layout(bloki, is_pallet=False, title="Paleta"):
 # --- 4. LOGIKA OBLICZEŃ ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
+
+def optymalizuj_paczke(n, L, W, H, k_name):
+    k = KURIERZY[k_name]
+    wyniki = []
+    for rl, rw, rh in get_orientations(L, W, H):
+        if rl == 0 or rw == 0 or rh == 0: continue
+        for nx in range(1, n + 1):
+            for ny in range(1, (n // nx) + 1):
+                if n % (nx * ny) == 0:
+                    nz = n // (nx * ny)
+                    fL, fW, fH = rl*nx, rw*ny, rh*nz
+                    ds = sorted([fL, fW, fH], reverse=True)
+                    girth = ds[0] + 2*ds[1] + 2*ds[2]
+                    if "Paczkomat" in k_name: ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
+                    else: ok = (ds[0] <= k["max_L"] and girth <= k["max_G"])
+                    if ok:
+                        score = abs(fL-fW) + abs(fW-fH) + abs(fL-fH)
+                        wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
+    return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
 def optymalizuj_palete_maksymalna(L, W, H, h_max):
     PL, PW = 1200, 800
@@ -143,81 +157,59 @@ def optymalizuj_palete_maksymalna(L, W, H, h_max):
                                    {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}]
     return best_layout, best_total
 
-# --- NOWY SILNIK: MIX TOWAROWY ---
 def optymalizuj_mix(items_list, h_max):
-    # items_list: list of {"dims": (L,W,H), "name": str, "qty": int, "color": str}
-    pallets = []
-    current_pallet_blocks = []
+    pallets = []; current_pallet_blocks = []
     curr_x, curr_y, curr_z = 0, 0, 0
     max_layer_h = 0
-    
-    # Sortowanie: największa podstawa na dół
     items_list.sort(key=lambda x: x['dims'][0]*x['dims'][1], reverse=True)
-    
     for item in items_list:
         l, w, h = item['dims']
         for _ in range(item['qty']):
-            # Sprawdzenie czy mieści się w rzędzie (Y)
             if curr_y + w > 800:
-                curr_y = 0
-                curr_x += l # Następny rząd (X)
-            
-            # Sprawdzenie czy mieści się na palecie (X)
+                curr_y = 0; curr_x += l
             if curr_x + l > 1200:
-                curr_x = 0
-                curr_y = 0
-                curr_z += max_layer_h # Następna warstwa (Z)
-                max_layer_h = 0
-            
-            # Sprawdzenie czy mieści się w wysokości (Z)
+                curr_x = 0; curr_y = 0; curr_z += max_layer_h; max_layer_h = 0
             if curr_z + h > h_max:
-                pallets.append(current_pallet_blocks)
-                current_pallet_blocks = []
-                curr_x, curr_y, curr_z = 0, 0, 0
-                max_layer_h = 0
-            
-            current_pallet_blocks.append({
-                'pos': (curr_x, curr_y, curr_z),
-                'dims': (l, w, h),
-                'color': item['color']
-            })
-            curr_y += w
-            max_layer_h = max(max_layer_h, h)
-            
-    if current_pallet_blocks:
-        pallets.append(current_pallet_blocks)
+                pallets.append(current_pallet_blocks); current_pallet_blocks = []
+                curr_x, curr_y, curr_z = 0, 0, 0; max_layer_h = 0
+            current_pallet_blocks.append({'pos': (curr_x, curr_y, curr_z), 'dims': (l, w, h), 'color': item['color']})
+            curr_y += w; max_layer_h = max(max_layer_h, h)
+    if current_pallet_blocks: pallets.append(current_pallet_blocks)
     return pallets
 
-# --- 5. INTERFEJS ---
+# --- 5. INTERFEJS GŁÓWNY ---
 if tryb == "🏗️ Mix Towarowy":
     to_pack = []
     for i, row in enumerate(df_input):
         if row["Sztuk"] > 0:
             d = PUDEŁKA_GROPAK[row["Karton"]]
-            to_pack.append({"dims": (d["L"], d["W"], d["H"]), "name": row["Karton"], "qty": row["Sztuk"], "color": MIX_PALETTE_COLORS[i % len(MIX_PALETTE_COLORS)]})
-    
+            to_pack.append({"dims": (d["L"], d["W"], d["H"]), "qty": row["Sztuk"], "color": MIX_PALETTE_COLORS[i % len(MIX_PALETTE_COLORS)]})
     if to_pack:
         pallets = optymalizuj_mix(to_pack, h_max)
-        st.subheader(f"Potrzeba palet: {len(pallets)}")
+        st.subheader(f"Wymagana liczba palet: {len(pallets)}")
         for idx, p_blocks in enumerate(pallets):
-            cols = st.columns([1, 2])
-            with cols[0]:
-                st.write(f"### Paleta nr {idx+1}")
-                st.write(f"Ilość kartonów: {len(p_blocks)}")
-            with cols[1]:
-                st.plotly_chart(rysuj_layout(p_blocks, is_pallet=True, title=f"Paleta {idx+1}"), use_container_width=True)
-    else:
-        st.info("Wpisz ilości kartonów w tabeli po lewej.")
+            c1, c2 = st.columns([1, 2.5])
+            with c1: st.write(f"### Paleta {idx+1}\nSztuk: {len(p_blocks)}")
+            with c2: st.plotly_chart(rysuj_layout(p_blocks, is_pallet=True, title=f"Paleta {idx+1}"), use_container_width=True)
+    else: st.info("Dodaj ilości w tabeli po lewej.")
 
 elif tryb == "🚛 Paleta (Jeden typ)":
     layout, total = optymalizuj_palete_maksymalna(L, W, H, h_max)
-    c1, c2 = st.columns([1, 2])
+    c1, c2 = st.columns([1, 2.5])
     with c1:
         st.success(f"Razem: {total} sztuk")
-        real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0])
+        real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0]) if total > 0 else 0
         st.write(f"Wysokość: {real_h} mm")
-    with c2:
-        st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
+    with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
 
-else: # PACZKA
-    st.info("Logika paczki kurierskiej (dostępna w sidebarze)")
+else: # PACZKA KURIERSKA
+    res = optymalizuj_paczke(sztuk, L, W, H, kurier_name)
+    if res:
+        nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
+        c1, c2 = st.columns([1, 2.5])
+        with c1:
+            st.success(f"Razem: {sztuk} szt.")
+            st.write(f"Instrukcja: {nx}x{ny}x{nz}")
+            st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
+        with c2: st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
+    else: st.error("Nie mieści się w limitach kuriera!")
