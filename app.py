@@ -68,40 +68,46 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość palety (mm):", 200, 2500, 1600)
 
-# --- ZAAWANSOWANA WIZUALIZACJA 3D (Brak prześwitów) ---
+# --- ZAAWANSOWANA WIZUALIZACJA 3D (Pełne, zabudowane bryły) ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
-    def dodaj_bryle(x, y, z, l, w, h, kolor, nazwa="Obiekt", show_edges=True):
-        # Generowanie wierzchołków i trójkątów dla pełnego, zamkniętego sześcianu
-        fig.add_trace(go.Mesh3d(
-            x=[x, x+l, x+l, x, x, x+l, x+l, x],
-            y=[y, y, y+w, y+w, y, y, y+w, y+w],
-            z=[z, z, z, z, z+h, z+h, z+h, z+h],
-            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1],
-            j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5],
-            k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
-            opacity=1, color=kolor, flatshading=True,
-            lighting=dict(ambient=0.5, diffuse=0.8, roughness=0.9, specular=0.1, fresnel=0.2),
-            lightposition=dict(x=3000, y=3000, z=5000),
-            name=nazwa, showlegend=False
+    # Pomocnicza funkcja rysująca jedną solidną ścianę
+    def rysuj_sciane(x, y, z, kolor, nazwa, flat_edges=True):
+        fig.add_trace(go.Scatter3d(
+            x=x, y=y, z=z,
+            mode='lines', # Rysujemy tylko kontur dla czystych krawędzi
+            surfaceaxis=0 if x[0] == x[2] else (1 if y[0] == y[2] else 2), # Auto-wybór osi powierzchni
+            surfacecolor=kolor,
+            name=nazwa, showlegend=False,
+            line=dict(color='black', width=3 if flat_edges else 0.5)
         ))
-        if show_edges:
-            lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
-            ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
-            lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
-            fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=3), showlegend=False))
+
+    def dodaj_solidna_bryle(x, y, z, l, w, h, kolor, nazwa="Obiekt", use_flat_edges=True):
+        # 6 pełnych ścian cuboida (każda to prostokąt, nie trójkąt)
+        # Ściana frontowa (z=z+h)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, nazwa, use_flat_edges)
+        # Ściana tylna (z=z)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, nazwa, use_flat_edges)
+        # Ściana dolna (y=y)
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, nazwa, use_flat_edges)
+        # Ściana górna (y=y+w)
+        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, nazwa, use_flat_edges)
+        # Ściana lewa (x=x)
+        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, nazwa, use_flat_edges)
+        # Ściana prawa (x=x+l)
+        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, nazwa, use_flat_edges)
 
     if is_pallet:
-        pallet_color = "#4E342E"
-        # Konstrukcja palety (elementy solidne)
+        pallet_color = "#4E342E" # Drewno, ciemne
+        # Konstrukcja palety (elementy pełne)
         for y_off in [0, 350, 700]: # Płozy
-            dodaj_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False)
+            dodaj_solidna_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False, use_flat_edges=False)
         for x_off in [0, 525, 1050]: # Klocki
             for y_off in [0, 350, 700]:
-                dodaj_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False)
+                dodaj_solidna_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False, use_flat_edges=False)
         for y_off in [0, 175, 350, 525, 700]: # Deski wierzch
-            dodaj_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False)
+            dodaj_solidna_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False, use_flat_edges=False)
 
     for b in bloki:
         x0, y0, z0 = b['pos']
@@ -110,14 +116,14 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
-                    dodaj_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU)
+                    dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU)
     
     fig.update_layout(
         scene=dict(
             aspectmode='data',
-            xaxis=dict(backgroundcolor="rgb(230, 230,230)", gridcolor="white", showbackground=True, zerolinecolor="white"),
-            yaxis=dict(backgroundcolor="rgb(230, 230,230)", gridcolor="white", showbackground=True, zerolinecolor="white"),
-            zaxis=dict(backgroundcolor="rgb(200, 200,200)", gridcolor="white", showbackground=True, zerolinecolor="white"),
+            xaxis=dict(gridcolor="rgb(220, 220, 220)", showbackground=True),
+            yaxis=dict(gridcolor="rgb(220, 220, 220)", showbackground=True),
+            zaxis=dict(gridcolor="rgb(200, 200, 200)", showbackground=True),
             camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
         ),
         margin=dict(l=0, r=0, b=0, t=0)
