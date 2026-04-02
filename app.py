@@ -56,7 +56,7 @@ KOLOR_KARTONU = "#C19A6B"
 
 st.set_page_config(page_title="Gropak - Schemat Załadunku", layout="wide")
 
-# CSS do ukrycia interfejsu podczas drukowania
+# CSS wymuszający drukowanie grafik i ukrywający śmieci
 st.markdown("""
     <style>
     @media print {
@@ -64,6 +64,11 @@ st.markdown("""
             display: none !important;
         }
         .main { background-color: white !important; }
+        .stPlotlyChart { 
+            visibility: visible !important;
+            display: block !important;
+            page-break-inside: avoid !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -89,8 +94,8 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 200, 2500, 1600)
 
-# --- 3. WIZUALIZACJA 3D (NAPRAWIONA) ---
-def rysuj_layout_3d(bloki, is_pallet=False):
+# --- 3. WIZUALIZACJA 3D (PANCERNA I NAPRAWIONA) ---
+def rysuj_layout_3d(bloki, is_pallet=False, print_mode=False):
     fig = go.Figure()
     
     def dodaj_sciane(x, y, z, kolor, border):
@@ -103,20 +108,20 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         ))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        # Definicja 6 płaskich ścian Scatter3d
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border) # Góra
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border) # Dół
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border) # Front
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border) # Tył
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border) # Lewo
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border) # Prawo
+        # Definicja 6 płaskich ścian
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border)
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border)
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
 
     if is_pallet:
-        pc = "#4E342E" # Drewno palety
-        for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False) # Płozy
+        pc = "#4E342E"
+        for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False)
         for x in [0, 525, 1050]:
-            for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False) # Klocki
-        for y in [0, 175, 350, 525, 700]: dodaj_bryle(0, y, -44, 1200, 100, 44, pc, False) # Deski
+            for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False)
+        for y in [0, 175, 350, 525, 700]: dodaj_bryle(0, y, -44, 1200, 100, 44, pc, False)
 
     for b in bloki:
         x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
@@ -128,8 +133,8 @@ def rysuj_layout_3d(bloki, is_pallet=False):
     
     fig.update_layout(
         scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))),
-        margin=dict(l=10, r=10, b=10, t=10), paper_bgcolor="white",
-        shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#e0e0e0", width=2))]
+        margin=dict(l=0, r=0, b=0, t=0),
+        paper_bgcolor="white"
     )
     return fig
 
@@ -198,23 +203,37 @@ else:
     if total > 0:
         with c1:
             st.subheader("📋 Plan Palety")
-            st.success(f"Razem: **{total} sztuk**")
+            st.success(f"Suma na palecie: **{total} sztuk**")
+            st.write(f"Wysokość towaru: {h_max} mm")
             st.divider()
             for i, b in enumerate(layout):
                 s = b['count'][0]*b['count'][1]*b['count'][2]
                 if s > 0:
-                    st.write(f"**Sekcja {i+1} ({s} szt.):** {b['dims'][0]}x{b['dims'][1]} mm")
+                    st.write(f"**Sekcja {i+1} ({s} szt.):**")
+                    st.write(f"- Karton: {b['dims'][0]}x{b['dims'][1]} mm")
+                    st.write(f"- Układ: {b['count'][1]} rzędów po {b['count'][0]} szt. (Warstw: {b['count'][2]})")
         with c2: st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
 
-        # --- SEKCJA DO DRUKU ---
-        st.divider()
-        st.header("📄 KARTA ZAŁADUNKU (DO DRUKU)")
-        st.write(f"**PRODUKT:** {wybrane} | **SUMA:** {total} SZTUK")
-        for i, b in enumerate(layout):
-            s = b['count'][0]*b['count'][1]*b['count'][2]
-            if s > 0:
-                st.markdown(f"* **SEKCJA {i+1}**: {s} szt. (Bokiem: {b['dims'][0]}x{b['dims'][1]} mm) - {b['count'][1]} rz. x {b['count'][0]} szt. x {b['count'][2]} warstw.")
+        # --- SEKCJA KARTY ZAŁADUNKU (STALE WIDOCZNA DLA DRUKARKI) ---
+        st.markdown("<br><hr><br>", unsafe_allow_html=True)
+        st.header("📄 KARTA ZAŁADUNKU DLA MAGAZYNU")
         
-        if st.button("🖨️ Drukuj schemat"):
+        pk1, pk2 = st.columns([1, 1])
+        with pk1:
+            st.markdown(f"### PRODUKT: **{wybrane}**")
+            st.markdown(f"### ŁĄCZNIE: **{total} SZTUK**")
+            st.write(f"Maksymalna wysokość towaru: {h_max} mm")
+            for i, b in enumerate(layout):
+                s = b['count'][0]*b['count'][1]*b['count'][2]
+                if s > 0:
+                    st.info(f"**SEKCJA {i+1}** ({s} szt.): {b['dims'][0]}x{b['dims'][1]} mm | {b['count'][1]} rzędów x {b['count'][0]} szt. x {b['count'][2]} warstw.")
+        
+        with pk2:
+            st.write("Podgląd schematu ułożenia:")
+            # Powtórzenie grafiki specjalnie do wydruku (żeby była blisko danych)
+            st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True, key="print_chart")
+
+        if st.button("🖨️ DRUKUJ KARTĘ ZAŁADUNKU"):
             components.html("<script>window.print();</script>", height=0)
+
     else: st.error("Nie mieści się!")
