@@ -41,15 +41,47 @@ PUDEŁKA_GROPAK = {
     "I19 (455x325x295)": {"L": 455, "W": 325, "H": 295, "Waga": 0.0},
     "K20 (485x385x295)": {"L": 485, "W": 385, "H": 295, "Waga": 0.0},
     "L21 (485x430x295)": {"L": 485, "W": 430, "H": 295, "Waga": 0.0},
+    "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600, "Waga": 0.0},
+    "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500, "Waga": 0.0},
+    "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220, "Waga": 0.0},
+    "Karton na folię (470x470x200)": {"L": 470, "W": 470, "H": 200, "Waga": 0.0},
+    "Karton na folię (470x470x300)": {"L": 470, "W": 470, "H": 300, "Waga": 0.0},
+    "Karton na folię (470x470x400)": {"L": 470, "W": 470, "H": 400, "Waga": 0.0},
     "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:210)": {"L": 295, "W": 295, "H": 210, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:310)": {"L": 295, "W": 295, "H": 310, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:340)": {"L": 295, "W": 295, "H": 340, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:360)": {"L": 295, "W": 295, "H": 360, "Waga": 0.0},
+    "Wypełniacz 295x295 (H:410)": {"L": 295, "W": 295, "H": 410, "Waga": 0.0},
+    "Wypełniacz 230x230 (H:210)": {"L": 230, "W": 230, "H": 210, "Waga": 0.0},
+    "Wypełniacz 230x230 (H:310)": {"L": 230, "W": 230, "H": 310, "Waga": 0.0},
+    "Wypełniacz 230x230 (H:410)": {"L": 230, "W": 230, "H": 410, "Waga": 0.0},
+    "Karton 90x90 (H:210)": {"L": 90, "W": 90, "H": 210, "Waga": 0.0},
+    "Karton 90x90 (H:310)": {"L": 90, "W": 90, "H": 310, "Waga": 0.0},
+    "Karton 90x90 (H:410)": {"L": 90, "W": 90, "H": 410, "Waga": 0.0},
+    "Karton 90x90 (H:510)": {"L": 90, "W": 90, "H": 510, "Waga": 0.0},
+    "Karton 90x90 (H:610)": {"L": 90, "W": 90, "H": 610, "Waga": 0.0},
+    "Karton 110x110 (H:210)": {"L": 110, "W": 110, "H": 210, "Waga": 0.0},
+    "Karton 110x110 (H:310)": {"L": 110, "W": 110, "H": 310, "Waga": 0.0},
+    "Karton 110x110 (H:410)": {"L": 110, "W": 110, "H": 410, "Waga": 0.0},
+    "Karton 110x110 (H:510)": {"L": 110, "W": 110, "H": 510, "Waga": 0.0},
+    "Karton 110x110 (H:610)": {"L": 110, "W": 110, "H": 610, "Waga": 0.0},
+    "Karton 160x160 (H:210)": {"L": 160, "W": 160, "H": 210, "Waga": 0.0},
+    "Karton 160x160 (H:310)": {"L": 160, "W": 160, "H": 310, "Waga": 0.0},
+    "Karton 160x160 (H:410)": {"L": 160, "W": 160, "H": 410, "Waga": 0.0},
+    "Karton 160x160 (H:510)": {"L": 160, "W": 160, "H": 510, "Waga": 0.0},
+    "Karton 160x160 (H:610)": {"L": 160, "W": 160, "H": 610, "Waga": 0.0},
+    "Karton 230x230 (H:510)": {"L": 230, "W": 230, "H": 510, "Waga": 0.0},
+    "Karton 230x230 (H:610)": {"L": 230, "W": 230, "H": 610, "Waga": 0.0},
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0, "Waga": 0.0}
 }
 
 KOLOR_KARTONU = "#C19A6B"
 
-st.set_page_config(page_title="Gropak Master Pro v4", layout="wide")
-st.title("📦 Gropak: System Optymalizacji (Wersja Solidna)")
+st.set_page_config(page_title="Gropak Master Pro v5", layout="wide")
+st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("1. Wybór towaru")
     wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
@@ -68,46 +100,47 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość palety (mm):", 200, 2500, 1600)
 
-# --- ZAAWANSOWANA WIZUALIZACJA 3D (Pełne, zabudowane bryły) ---
+# --- ZAAWANSOWANA WIZUALIZACJA 3D (Bez przekątnych) ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
-    # Pomocnicza funkcja rysująca jedną solidną ścianę
-    def rysuj_sciane(x, y, z, kolor, nazwa, flat_edges=True):
+    def rysuj_sciane(x_coords, y_coords, z_coords, kolor, show_edges):
+        # Scatter3d z fill='toself' rysuje czysty prostokąt bez trójkątów w środku
         fig.add_trace(go.Scatter3d(
-            x=x, y=y, z=z,
-            mode='lines', # Rysujemy tylko kontur dla czystych krawędzi
-            surfaceaxis=0 if x[0] == x[2] else (1 if y[0] == y[2] else 2), # Auto-wybór osi powierzchni
+            x=x_coords, y=y_coords, z=z_coords,
+            mode='lines',
+            fill='toself',
+            surfaceaxis=0 if len(set(x_coords)) == 1 else (1 if len(set(y_coords)) == 1 else 2),
             surfacecolor=kolor,
-            name=nazwa, showlegend=False,
-            line=dict(color='black', width=3 if flat_edges else 0.5)
+            line=dict(color='black', width=2 if show_edges else 0),
+            showlegend=False,
+            hoverinfo='skip'
         ))
 
-    def dodaj_solidna_bryle(x, y, z, l, w, h, kolor, nazwa="Obiekt", use_flat_edges=True):
-        # 6 pełnych ścian cuboida (każda to prostokąt, nie trójkąt)
-        # Ściana frontowa (z=z+h)
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, nazwa, use_flat_edges)
-        # Ściana tylna (z=z)
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, nazwa, use_flat_edges)
-        # Ściana dolna (y=y)
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, nazwa, use_flat_edges)
-        # Ściana górna (y=y+w)
-        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, nazwa, use_flat_edges)
-        # Ściana lewa (x=x)
-        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, nazwa, use_flat_edges)
-        # Ściana prawa (x=x+l)
-        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, nazwa, use_flat_edges)
+    def dodaj_solidna_bryle(x, y, z, l, w, h, kolor, show_edges=True):
+        # Góra
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, show_edges)
+        # Dół
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, show_edges)
+        # Front
+        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, show_edges)
+        # Tył
+        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, show_edges)
+        # Lewo
+        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges)
+        # Prawo
+        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges)
 
     if is_pallet:
-        pallet_color = "#4E342E" # Drewno, ciemne
-        # Konstrukcja palety (elementy pełne)
+        pallet_color = "#4E342E"
+        # Konstrukcja palety (elementy solidne bez krawędzi dla czystości)
         for y_off in [0, 350, 700]: # Płozy
-            dodaj_solidna_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False, use_flat_edges=False)
+            dodaj_solidna_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False)
         for x_off in [0, 525, 1050]: # Klocki
             for y_off in [0, 350, 700]:
-                dodaj_solidna_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False, use_flat_edges=False)
+                dodaj_solidna_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False)
         for y_off in [0, 175, 350, 525, 700]: # Deski wierzch
-            dodaj_solidna_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False, use_flat_edges=False)
+            dodaj_solidna_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False)
 
     for b in bloki:
         x0, y0, z0 = b['pos']
@@ -116,13 +149,13 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
-                    dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU)
+                    dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU, show_edges=True)
     
     fig.update_layout(
         scene=dict(
             aspectmode='data',
-            xaxis=dict(gridcolor="rgb(220, 220, 220)", showbackground=True),
-            yaxis=dict(gridcolor="rgb(220, 220, 220)", showbackground=True),
+            xaxis=dict(gridcolor="rgb(230, 230, 230)", showbackground=True),
+            yaxis=dict(gridcolor="rgb(230, 230, 230)", showbackground=True),
             zaxis=dict(gridcolor="rgb(200, 200, 200)", showbackground=True),
             camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
         ),
@@ -130,7 +163,7 @@ def rysuj_layout_3d(bloki, is_pallet=False):
     )
     return fig
 
-# --- LOGIKA OPTYMALIZACJI (Bez zmian) ---
+# --- LOGIKA OPTYMALIZACJI ---
 def optymalizuj_paczke(n, L, W, H, k_name):
     k = KURIERZY[k_name]
     wyniki = []
@@ -143,10 +176,8 @@ def optymalizuj_paczke(n, L, W, H, k_name):
                     fL, fW, fH = rl*nx, rw*ny, rh*nz
                     ds = sorted([fL, fW, fH], reverse=True)
                     girth = ds[0] + 2*ds[1] + 2*ds[2]
-                    if "Paczkomat" in k_name or "Orlen Paczka" in k_name:
-                        ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
-                    else:
-                        ok = (ds[0] <= k["max_L"] and girth <= k["max_G"])
+                    if "Paczkomat" in k_name or "Orlen Paczka" in k_name: ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
+                    else: ok = (ds[0] <= k["max_L"] and girth <= k["max_G"])
                     if ok:
                         score = abs(fL-fW) + abs(fW-fH) + abs(fL-fH)
                         wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
@@ -197,7 +228,7 @@ if tryb == "📦 Paczka Kurierska":
         with c2:
             st.plotly_chart(rysuj_layout_3d([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
     else:
-        st.error("❌ Nie mieści się!")
+        st.error("❌ Przekroczono limity kuriera!")
 else:
     layout, total = optymalizuj_palete(L, W, H, h_max)
     if total > 0:
@@ -212,4 +243,4 @@ else:
         with c2:
             st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
     else:
-        st.error("❌ Za duży karton!")
+        st.error("❌ Karton nie mieści się na palecie!")
