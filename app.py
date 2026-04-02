@@ -44,6 +44,8 @@ PUDEŁKA_GROPAK = {
     "Zbiorczy na dyspenser 400 (465x245x190)": {"L": 465, "W": 245, "H": 190},
     "Karton na folię (470x470x500)": {"L": 470, "W": 470, "H": 500},
     "Karton na folię (350x350x600)": {"L": 350, "W": 350, "H": 600},
+    "Karton na folię (600x600x500)": {"L": 600, "W": 600, "H": 500},
+    "Karton na folię (300x300x1220)": {"L": 300, "W": 300, "H": 1220},
     "Wypełniacz 295x295 (H:410)": {"L": 295, "W": 295, "H": 410},
     "Wypełniacz 230x230 (H:410)": {"L": 230, "W": 230, "H": 410},
     "Karton 90x90 (H:610)": {"L": 90, "W": 90, "H": 610},
@@ -54,22 +56,21 @@ PUDEŁKA_GROPAK = {
 
 KOLOR_KARTONU = "#C19A6B"
 
-st.set_page_config(page_title="Gropak - System Wysyłek", layout="wide")
+st.set_page_config(page_title="Gropak - System Optymalizacji", layout="wide")
 
-# CSS do drukowania
+# CSS do drukowania - wymusza widoczność grafik
 st.markdown("""
     <style>
     @media print {
         header, [data-testid="stSidebar"], .stButton, [data-testid="stToolbar"] { display: none !important; }
         .main { background-color: white !important; }
-        .stPlotlyChart { page-break-inside: avoid !important; }
+        .stPlotlyChart { visibility: visible !important; display: block !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.header("1. Towar")
     wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
@@ -80,7 +81,7 @@ with st.sidebar:
     
     st.divider()
     st.header("2. Metoda")
-    tryb = st.radio("Tryb:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
+    tryb = st.radio("Metoda:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
 
     if tryb == "📦 Paczka Kurierska":
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
@@ -88,11 +89,12 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 1600)
 
-# --- 3. WIZUALIZACJA 3D / RZUTY (NAPRAWIONE) ---
+# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW (ONLY SCATTER3D SURFACES) ---
 def rysuj_layout(bloki, is_pallet=False, view_type="3d"):
     fig = go.Figure()
     
-    def dodaj_sciane(x, y, z, kolor, border):
+    def dodaj_sciane(x, y, z, kolor, border=True):
+        # Scatter3d z surfaceaxis to jedyny sposób na 100% płaskie ściany bez skosów
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
             surfaceaxis=0 if len(set(x)) == 1 else (1 if len(set(y)) == 1 else 2),
@@ -102,15 +104,17 @@ def rysuj_layout(bloki, is_pallet=False, view_type="3d"):
         ))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border) # Góra
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border) # Dół
-        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border) # Front
-        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border) # Tył
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border) # Lewo
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border) # Prawo
+        # Góra i Dół
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, border)
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border)
+        # Boki
+        dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border)
+        dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border)
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border)
 
     if is_pallet:
-        pc = "#4E342E"
+        pc = "#4E342E" # Ciemne drewno
         for y in [0, 350, 700]: dodaj_bryle(0, y, -144, 1200, 100, 22, pc, False)
         for x in [0, 525, 1050]:
             for y in [0, 350, 700]: dodaj_bryle(x, y, -122, 150, 100, 78, pc, False)
@@ -123,8 +127,7 @@ def rysuj_layout(bloki, is_pallet=False, view_type="3d"):
                 for iz in range(b['count'][2]):
                     dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, KOLOR_KARTONU)
     
-    # Naprawiona konfiguracja kamery (projection wewnątrz camera)
-    camera_settings = {
+    camera_config = {
         "3d": dict(eye=dict(x=1.8, y=1.8, z=1.5), projection=dict(type='perspective')),
         "top": dict(eye=dict(x=0, y=0, z=2.5), up=dict(x=0, y=1, z=0), projection=dict(type='orthographic')),
         "front": dict(eye=dict(x=0, y=3, z=0), up=dict(x=0, y=0, z=1), projection=dict(type='orthographic')),
@@ -134,7 +137,7 @@ def rysuj_layout(bloki, is_pallet=False, view_type="3d"):
     fig.update_layout(
         scene=dict(
             aspectmode='data',
-            camera=camera_settings.get(view_type, camera_settings["3d"]),
+            camera=camera_config.get(view_type, camera_config["3d"]),
             xaxis=dict(visible=True if view_type=="3d" else False),
             yaxis=dict(visible=True if view_type=="3d" else False),
             zaxis=dict(visible=True if view_type=="3d" else False)
@@ -181,10 +184,8 @@ def optymalizuj_palete_plecakowa(L, W, H, h_max):
                 total = (n1 * nx1 * nz1) + (n2 * nx2 * nz2)
                 if total > best_total:
                     best_total = total
-                    best_layout = [
-                        {'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
-                        {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}
-                    ]
+                    best_layout = [{'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
+                                   {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}]
     return best_layout, best_total
 
 # --- 5. INTERFEJS ---
@@ -196,8 +197,7 @@ if tryb == "📦 Paczka Kurierska":
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
         with c1:
             st.subheader("📋 Instrukcja")
-            st.success(f"Razem: {sztuk} szt.")
-            st.write(f"- Ustawienie kartonu: {rl}x{rw} mm")
+            st.success(f"Razem: {sztuk} szt. | Ułożenie: {rl}x{rw} mm")
             st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
         with c2: st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
     else: st.error("Nie mieści się!")
@@ -214,21 +214,22 @@ else:
                 if s > 0: st.write(f"**Sekcja {i+1}**: {s} szt. ({b['dims'][0]}x{b['dims'][1]} mm)")
         with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
 
-        # --- KARTA ZAŁADUNKU ---
+        # --- KARTA ZAŁADUNKU (Wersja 100% do druku) ---
         st.markdown("<br><hr style='border: 2px solid black;'><br>", unsafe_allow_html=True)
         st.header("📄 KARTA ZAŁADUNKU DLA MAGAZYNU")
         st.markdown(f"### **PRODUKT:** {wybrane} | **SUMA:** {total} SZTUK")
         
+        # Klucz do druku: staticPlot=True zamienia wykres w obrazek
         col_t, col_f, col_s = st.columns(3)
         with col_t:
-            st.write("**WIDOK Z GÓRY**")
-            st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="top"), use_container_width=True, key="print_top")
+            st.write("**RZUT Z GÓRY**")
+            st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="top"), use_container_width=True, config={'staticPlot': True})
         with col_f:
-            st.write("**WIDOK OD FRONTU**")
-            st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="front"), use_container_width=True, key="print_front")
+            st.write("**RZUT OD FRONTU**")
+            st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="front"), use_container_width=True, config={'staticPlot': True})
         with col_s:
-            st.write("**WIDOK Z BOKU**")
-            st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="side"), use_container_width=True, key="print_side")
+            st.write("**RZUT Z BOKU**")
+            st.plotly_chart(rysuj_layout(layout, is_pallet=True, view_type="side"), use_container_width=True, config={'staticPlot': True})
         
         st.subheader("📝 INSTRUKCJA")
         for i, b in enumerate(layout):
@@ -236,6 +237,6 @@ else:
             if s > 0:
                 st.markdown(f"**SEKCJA {i+1}:** {s} szt. Połóż karton na boku **{b['dims'][0]}x{b['dims'][1]}**. Ułóż {b['count'][1]} rzędów po {b['count'][0]} szt. w {b['count'][2]} warstwach.")
 
-        if st.button("🖨️ DRUKUJ KARTĘ"):
+        if st.button("🖨️ DRUKUJ KARTĘ ZAŁADUNKU"):
             components.html("<script>window.print();</script>", height=0)
     else: st.error("Nie mieści się!")
