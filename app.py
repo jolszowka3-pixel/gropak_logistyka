@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- 1. BAZA KURIERÓW ---
+# --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
     "DPD (Standard)": {"max_L": 1750, "max_G": 3000, "max_W": 31.5},
     "DHL (Standard)": {"max_L": 1200, "max_G": 3000, "max_W": 31.5},
@@ -12,7 +12,7 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. BAZA KARTONÓW (Wymiary Zew: wew + 5mm) ---
+# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Wymiary Zew: wew + 5mm) ---
 PUDEŁKA_GROPAK = {
     "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
     "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
@@ -36,9 +36,9 @@ PUDEŁKA_GROPAK = {
 
 KOLOR_KARTONU = "#C19A6B"
 TOLERANCJA_H = 50 
-MIX_PALETTE_COLORS = ["#C19A6B", "#8D6E63", "#78909C", "#5D4037", "#A1887F", "#455A64"]
+MIX_COLORS = ["#C19A6B", "#8D6E63", "#78909C", "#5D4037", "#455A64", "#A1887F", "#37474F", "#D7CCC8"]
 
-st.set_page_config(page_title="Gropak Master Pro", layout="wide")
+st.set_page_config(page_title="Gropak Master Pro - Mix Fix", layout="wide")
 st.title("📦 Gropak: System Optymalizacji Wysyłek")
 
 # --- SIDEBAR ---
@@ -53,7 +53,7 @@ with st.sidebar:
         df_input = st.data_editor(
             [{"Karton": k, "Sztuk": 0} for k in PUDEŁKA_GROPAK.keys()],
             column_config={"Karton": st.column_config.TextColumn(disabled=True), "Sztuk": st.column_config.NumberColumn(min_value=0, step=1)},
-            hide_index=True
+            hide_index=True, use_container_width=True
         )
     else:
         wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
@@ -120,25 +120,6 @@ def rysuj_layout(bloki, is_pallet=False, title=""):
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
-def optymalizuj_paczke(n, L, W, H, k_name):
-    k = KURIERZY[k_name]
-    wyniki = []
-    for rl, rw, rh in get_orientations(L, W, H):
-        if rl == 0 or rw == 0 or rh == 0: continue
-        for nx in range(1, n + 1):
-            for ny in range(1, (n // nx) + 1):
-                if n % (nx * ny) == 0:
-                    nz = n // (nx * ny)
-                    fL, fW, fH = rl*nx, rw*ny, rh*nz
-                    ds = sorted([fL, fW, fH], reverse=True)
-                    girth = ds[0] + 2*ds[1] + 2*ds[2]
-                    if "Paczkomat" in k_name: ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
-                    else: ok = (ds[0] <= k["max_L"] and girth <= k["max_G"])
-                    if ok:
-                        score = abs(fL-fW) + abs(fW-fH) + abs(fL-fH)
-                        wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
-    return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
-
 def optymalizuj_palete_maksymalna(L, W, H, h_max):
     PL, PW = 1200, 800
     orient = get_orientations(L, W, H)
@@ -157,24 +138,85 @@ def optymalizuj_palete_maksymalna(L, W, H, h_max):
                                    {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}]
     return best_layout, best_total
 
-def optymalizuj_mix(items_list, h_max):
-    pallets = []; current_pallet_blocks = []
-    curr_x, curr_y, curr_z = 0, 0, 0
-    max_layer_h = 0
-    items_list.sort(key=lambda x: x['dims'][0]*x['dims'][1], reverse=True)
-    for item in items_list:
-        l, w, h = item['dims']
+# --- NOWY, POPRAWIONY SILNIK MIX: STABILNOŚĆ I WYPEŁNIENIE ---
+def optymalizuj_mix_stabilny(items_to_pack, h_max):
+    pallets = []
+    current_pallet_blocks = []
+    
+    # 1. Sortowanie po powierzchni podstawy (L*W) - Największe na spód!
+    # Dodatkowo po wysokości, żeby równe warstwy tworzyć
+    items_to_pack.sort(key=lambda x: (x['dims'][0]*x['dims'][1], x['dims'][2]), reverse=True)
+    
+    # Rozwijamy listę na pojedyncze sztuki dla dokładnego pakowania
+    all_single_items = []
+    for item in items_to_pack:
         for _ in range(item['qty']):
-            if curr_y + w > 800:
-                curr_y = 0; curr_x += l
-            if curr_x + l > 1200:
-                curr_x = 0; curr_y = 0; curr_z += max_layer_h; max_layer_h = 0
-            if curr_z + h > h_max:
-                pallets.append(current_pallet_blocks); current_pallet_blocks = []
-                curr_x, curr_y, curr_z = 0, 0, 0; max_layer_h = 0
-            current_pallet_blocks.append({'pos': (curr_x, curr_y, curr_z), 'dims': (l, w, h), 'color': item['color']})
-            curr_y += w; max_layer_h = max(max_layer_h, h)
-    if current_pallet_blocks: pallets.append(current_pallet_blocks)
+            all_single_items.append(item)
+            
+    curr_z = 0
+    while all_single_items:
+        # Rozpoczynamy nową paletę lub warstwę
+        if curr_z >= h_max:
+            pallets.append(current_pallet_blocks)
+            current_pallet_blocks = []
+            curr_z = 0
+            
+        layer_h = 0
+        curr_x = 0
+        curr_y = 0
+        
+        # Pakowanie warstwy (1200x800)
+        items_in_current_layer = []
+        
+        # Algorytm rzędowy wewnątrz warstwy
+        row_max_h = 0
+        while all_single_items:
+            item = all_single_items[0]
+            l, w, h = item['dims']
+            
+            # Sprawdź czy zmieści się w rzędzie (Y)
+            if curr_y + w <= 800:
+                # Sprawdź czy zmieści się w długości (X)
+                if curr_x + l <= 1200:
+                    # Sprawdź czy zmieści się w wysokości
+                    if curr_z + h <= h_max + TOLERANCJA_H:
+                        # Pakujemy!
+                        current_pallet_blocks.append({
+                            'pos': (curr_x, curr_y, curr_z),
+                            'dims': (l, w, h),
+                            'color': item['color']
+                        })
+                        row_max_h = max(row_max_h, h)
+                        curr_y += w
+                        all_single_items.pop(0)
+                    else:
+                        # Za wysoki na tę paletę
+                        break
+                else:
+                    # Koniec palety w osi X
+                    break
+            else:
+                # Następny rząd w osi X
+                curr_x += l 
+                curr_y = 0
+                if curr_x >= 1200: break # Koniec warstwy
+                
+        # Po wypełnieniu warstwy (lub rzędów) podnosimy poziom Z
+        if row_max_h == 0: # Nic nie weszło
+            if current_pallet_blocks:
+                pallets.append(current_pallet_blocks)
+                current_pallet_blocks = []
+                curr_z = 0
+            else:
+                # Pojedynczy karton jest za duży na paletę!
+                all_single_items.pop(0)
+            continue
+            
+        curr_z += row_max_h
+
+    if current_pallet_blocks:
+        pallets.append(current_pallet_blocks)
+        
     return pallets
 
 # --- 5. INTERFEJS GŁÓWNY ---
@@ -183,15 +225,26 @@ if tryb == "🏗️ Mix Towarowy":
     for i, row in enumerate(df_input):
         if row["Sztuk"] > 0:
             d = PUDEŁKA_GROPAK[row["Karton"]]
-            to_pack.append({"dims": (d["L"], d["W"], d["H"]), "qty": row["Sztuk"], "color": MIX_PALETTE_COLORS[i % len(MIX_PALETTE_COLORS)]})
+            to_pack.append({
+                "dims": (d["L"], d["W"], d["H"]), 
+                "qty": int(row["Sztuk"]), 
+                "color": MIX_COLORS[i % len(MIX_COLORS)]
+            })
+            
     if to_pack:
-        pallets = optymalizuj_mix(to_pack, h_max)
+        pallets = optymalizuj_mix_stabilny(to_pack, h_max)
         st.subheader(f"Wymagana liczba palet: {len(pallets)}")
         for idx, p_blocks in enumerate(pallets):
             c1, c2 = st.columns([1, 2.5])
-            with c1: st.write(f"### Paleta {idx+1}\nSztuk: {len(p_blocks)}")
-            with c2: st.plotly_chart(rysuj_layout(p_blocks, is_pallet=True, title=f"Paleta {idx+1}"), use_container_width=True)
-    else: st.info("Dodaj ilości w tabeli po lewej.")
+            with c1: 
+                st.info(f"### Paleta {idx+1}")
+                st.write(f"Łącznie sztuk: **{len(p_blocks)}**")
+                p_h = max([b['pos'][2]+b['dims'][2] for b in p_blocks]) if p_blocks else 0
+                st.write(f"Wysokość: **{p_h} mm**")
+            with c2: 
+                st.plotly_chart(rysuj_layout(p_blocks, is_pallet=True, title=f"Wizualizacja Palety {idx+1}"), use_container_width=True)
+    else:
+        st.info("Zwiększ ilość sztuk w tabeli po lewej, aby zobaczyć wizualizację.")
 
 elif tryb == "🚛 Paleta (Jeden typ)":
     layout, total = optymalizuj_palete_maksymalna(L, W, H, h_max)
@@ -199,17 +252,33 @@ elif tryb == "🚛 Paleta (Jeden typ)":
     with c1:
         st.success(f"Razem: {total} sztuk")
         real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0]) if total > 0 else 0
-        st.write(f"Wysokość: {real_h} mm")
-    with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
+        st.write(f"Wysokość towaru: {real_h} mm")
+    with c2:
+        st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
 
 else: # PACZKA KURIERSKA
+    def optymalizuj_paczke(n, L, W, H, k_name):
+        k = KURIERZY[k_name]; wyniki = []
+        for rl, rw, rh in get_orientations(L, W, H):
+            for nx in range(1, n + 1):
+                for ny in range(1, (n // nx) + 1):
+                    if n % (nx * ny) == 0:
+                        nz = n // (nx * ny)
+                        fL, fW, fH = rl*nx, rw*ny, rh*nz
+                        ds = sorted([fL, fW, fH], reverse=True)
+                        girth = ds[0] + 2*ds[1] + 2*ds[2]
+                        if "Paczkomat" in k_name: ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
+                        else: ok = (ds[0] <= k["max_L"] and girth <= k["max_G"])
+                        if ok: wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": abs(fL-fW)+abs(fW-fH)})
+        return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
+
     res = optymalizuj_paczke(sztuk, L, W, H, kurier_name)
     if res:
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
         c1, c2 = st.columns([1, 2.5])
         with c1:
-            st.success(f"Razem: {sztuk} szt.")
-            st.write(f"Instrukcja: {nx}x{ny}x{nz}")
+            st.success(f"Razem: {sztuk} sztuk")
+            st.write(f"Układ: {nx} x {ny} x {nz}")
             st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
         with c2: st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
     else: st.error("Nie mieści się w limitach kuriera!")
