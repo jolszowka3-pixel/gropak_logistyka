@@ -112,30 +112,46 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość palety (mm):", 200, 2500, 1600)
 
-# --- ZAAWANSOWANA WIZUALIZACJA 3D (Bez prześwitów i przekątnych) ---
+# --- ZAAWANSOWANA WIZUALIZACJA 3D ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
     def rysuj_sciane(x_coords, y_coords, z_coords, kolor, show_edges):
-        # surfaceaxis tworzy solidną płaszczyznę bez podziału na trójkąty
         fig.add_trace(go.Scatter3d(
             x=x_coords, y=y_coords, z=z_coords,
             mode='lines',
-            surfaceaxis=0 if len(set(x_coords)) == 1 else (1 if len(set(y_coords)) == 1 else 2),
-            surfacecolor=kolor,
+            # fill='toself' usunięte, bo powodowało błędy w Scatter3d w nowszych Plotly
+            # Zamiast tego używamy surfaceaxis w update_traces poniżej, jeśli potrzebne,
+            # ale Scatter3d z samymi liniami jest stabilniejszy.
             line=dict(color='black', width=3 if show_edges else 0),
             showlegend=False,
             hoverinfo='skip'
         ))
 
     def dodaj_solidna_bryle(x, y, z, l, w, h, kolor, show_edges=True):
-        # Każdy sześcian to 6 idealnie płaskich ścian prostokątnych
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, show_edges) # Góra
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, show_edges) # Dół
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, show_edges) # Front
-        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, show_edges) # Tył
-        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges) # Lewo
-        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges) # Prawo
+        # Definiujemy Mesh3d dla solidnego wypełnienia bez diagonalnych linii
+        fig.add_trace(go.Mesh3d(
+            x=[x, x+l, x+l, x, x, x+l, x+l, x],
+            y=[y, y, y+w, y+w, y, y, y+w, y+w],
+            z=[z, z, z, z, z+h, z+h, z+h, z+h],
+            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], # indeksy wierzchołków dla ścian
+            j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5],
+            k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
+            opacity=1,
+            color=kolor,
+            flatshading=True, # kluczowe dla płaskich ścian bez cieniowania smoothing
+            lighting=dict(ambient=0.5, diffuse=0.8, roughness=0.9, specular=0.1, fresnel=0.2),
+            lightposition=dict(x=3000, y=3000, z=5000),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+        
+        # Dodajemy krawędzie Scatter3d dla czystego konturu
+        if show_edges:
+            lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
+            ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
+            lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
+            fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False, hoverinfo='skip'))
 
     if is_pallet:
         pallet_color = "#4E342E"
@@ -155,11 +171,49 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
-                    dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU)
+                    dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU, show_edges=True)
     
+    # --- DODANIE RAMKI I STYLIZACJI DO WIZUALIZACJI ---
     fig.update_layout(
-        scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))),
-        margin=dict(l=0, r=0, b=0, t=0)
+        scene=dict(
+            aspectmode='data',
+            xaxis=dict(gridcolor="rgb(230, 230, 230)", showbackground=True, backgroundcolor="rgb(250, 250, 250)"),
+            yaxis=dict(gridcolor="rgb(230, 230, 230)", showbackground=True, backgroundcolor="rgb(250, 250, 250)"),
+            zaxis=dict(gridcolor="rgb(200, 200, 200)", showbackground=True, backgroundcolor="rgb(240, 240, 240)"),
+            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
+        ),
+        margin=dict(l=10, r=10, b=10, t=10), # Małe marginesy wewnątrz ramki
+        paper_bgcolor="white", # Kolor tła "papieru"
+        plot_bgcolor="white",
+        # Rysowanie ramki wokół całego obszaru papieru (paper coordinates 0-1)
+        shapes=[dict(
+            type="rect",
+            xref="paper",
+            yref="paper",
+            x0=0,
+            y0=0,
+            x1=1,
+            y1=1,
+            line=dict(
+                color="#e0e0e0", # Jasnoszary kolor ramki
+                width=2,
+            ),
+            # Opcjonalnie: cień pod ramką (efekt uniesienia)
+            fillcolor="rgba(0,0,0,0)", # Przezroczyste wypełnienie
+        )],
+        # Dodanie cienia za pomocą annotations (trik Plotly)
+        annotations=[dict(
+            xref="paper",
+            yref="paper",
+            x=0.5,
+            y=-0.02,
+            text="",
+            showarrow=False,
+            width=fig.layout.width,
+            height=10,
+            bgcolor="rgba(0,0,0,0.03)", # Bardzo delikatny cień na dole
+            bordercolor="rgba(0,0,0,0)",
+        )]
     )
     return fig
 
