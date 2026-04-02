@@ -21,7 +21,7 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Wymiary wew + 5mm) ---
+# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Zew: wew + 5mm) ---
 PUDEŁKA_GROPAK = {
     "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
     "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
@@ -42,8 +42,6 @@ PUDEŁKA_GROPAK = {
     "Zbiorczy dyspenser 200 (370x270x290)": {"L": 370, "W": 270, "H": 290},
     "Zbiorczy dyspenser 400 (470x250x195)": {"L": 470, "W": 250, "H": 195},
     "Karton na folię (475x475x505)": {"L": 475, "W": 475, "H": 505},
-    "Karton na folię (355x355x605)": {"L": 355, "W": 355, "H": 605},
-    "Karton na folię (605x605x505)": {"L": 605, "W": 605, "H": 505},
     "Wypełniacz 295 (300x300x415)": {"L": 300, "W": 300, "H": 415},
     "Karton 90x90 (95x95x615)": {"L": 95, "W": 95, "H": 615},
     "Karton 160x160 (165x165x615)": {"L": 165, "W": 165, "H": 615},
@@ -57,7 +55,7 @@ st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: Optymalizacja Wysyłek")
 
 with st.sidebar:
-    st.header("1. Wybór towaru")
+    st.header("1. Towar")
     wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
     if wybrane == "Własny wymiar...":
         L = st.number_input("Dł zew (mm)", 10); W = st.number_input("Szer zew (mm)", 10); H = st.number_input("Wys zew (mm)", 10)
@@ -74,7 +72,7 @@ with st.sidebar:
     else:
         h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 1600)
 
-# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW I SIATKI ---
+# --- 3. WIZUALIZACJA BEZ TRÓJKĄTÓW I BEZ SIATKI ---
 def rysuj_layout(bloki, is_pallet=False):
     fig = go.Figure()
     
@@ -91,8 +89,8 @@ def rysuj_layout(bloki, is_pallet=False):
         dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, border, 2)
         dodaj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, border, 1)
         dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, border, 1)
-        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border, 0)
-        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, border, 0)
+        dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border, 0)
+        dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z, z+h, z+h, z], kolor, border, 0)
 
     if is_pallet:
         pc = "#4E342E"
@@ -119,7 +117,7 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA (EKSTREMALNA OPTYMALIZACJA) ---
+# --- 4. LOGIKA ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -146,30 +144,26 @@ def optymalizuj_palete_maksymalna(L, W, H, h_max):
     PL, PW = 1200, 800
     orient = get_orientations(L, W, H)
     best_total = 0
-    best_area_coverage = 0
     best_layout = []
 
-    # Iterujemy przez wszystkie orientacje i ich kombinacje rzędowe
+    # Szukamy absolutnego maksimum sztuk sprawdzając każdą możliwą orientację warstwy
     for o1 in orient:
         for o2 in orient:
-            # PW // o1[1] to maksymalna liczba rzędów orientacji o1
+            # PW // o1[1] to liczba rzędów o1 w szerokości 800mm
             for n1 in range(PW // o1[1] + 1):
                 rem_y = PW - (n1 * o1[1])
                 n2 = rem_y // o2[1]
                 
-                # Ilość wzdłuż palety (1200mm)
                 nx1, nx2 = PL // o1[0], PL // o2[0]
-                
-                # Warstwy (nz) - klucz do Twojej prośby o A11
                 nz1, nz2 = h_max // o1[2], h_max // o2[2]
                 
-                total = (n1 * nx1 * nz1) + (n2 * nx2 * nz2)
-                area_cov = (n1 * nx1 * o1[0] * o1[1]) + (n2 * nx2 * o2[0] * o2[1])
+                # Walidacja czy cokolwiek wchodzi w danej sekcji
+                s1 = (nx1 * n1 * nz1) if nz1 > 0 else 0
+                s2 = (nx2 * n2 * nz2) if nz2 > 0 else 0
+                total = s1 + s2
 
-                # Wybieramy układ, który daje WIĘCEJ SZTUK TOTALNIE
-                if total > best_total or (total == best_total and area_cov > best_area_coverage):
+                if total > best_total:
                     best_total = total
-                    best_area_coverage = area_cov
                     best_layout = [
                         {'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
                         {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}
