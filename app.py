@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
 
-# --- KOMPLEKSOWA BAZA KURIERÓW ---
+# --- KURIERZY (mm i kg) ---
 KURIERZY = {
     "DPD (Standard)": {"max_L": 1750, "max_G": 3000, "max_W": 31.5},
     "DHL (Standard)": {"max_L": 1200, "max_G": 3000, "max_W": 31.5},
@@ -91,50 +91,39 @@ with st.sidebar:
         p = PUDEŁKA_GROPAK[wybrane]; L, W, H, Waga = p["L"], p["W"], p["H"], p["Waga"]
     
     st.divider()
-    st.header("2. Tryb Pracy")
-    tryb = st.radio("Metoda wysyłki:", ["📦 Paczka Kurierska", "🚛 Paleta EURO (1200x800)"])
+    st.header("2. Metoda")
+    tryb = st.radio("Tryb pracy:", ["Paczka Kurierska", "Paleta EURO (1200x800)"])
 
-    if tryb == "📦 Paczka Kurierska":
+    if tryb == "Paczka Kurierska":
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 100, 6)
     else:
         h_max = st.number_input("Maks. wysokość palety (mm):", 200, 2500, 1600)
 
-# --- EKSTREMALNIE SOLIDNA WIZUALIZACJA 3D (Bez trójkątów) ---
+# --- ZAAWANSOWANA WIZUALIZACJA 3D (Solidne bryły + Realistyczna Paleta) ---
 def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
-    def rysuj_sciane(x, y, z, kolor, show_edges):
-        # surfaceaxis=0/1/2 tworzy idealnie płaski prostokąt z Scatter3d konturu
-        fig.add_trace(go.Scatter3d(
-            x=x, y=y, z=z,
-            mode='lines',
-            surfaceaxis=0 if len(set(x)) == 1 else (1 if len(set(y)) == 1 else 2),
-            surfacecolor=kolor,
-            line=dict(color='black', width=3 if show_edges else 0),
-            showlegend=False,
-            hoverinfo='skip'
+    def dodaj_bryle(x, y, z, l, w, h, kolor, show_edges=True):
+        fig.add_trace(go.Mesh3d(
+            x=[x, x+l, x+l, x, x, x+l, x+l, x],
+            y=[y, y, y+w, y+w, y, y, y+w, y+w],
+            z=[z, z, z, z, z+h, z+h, z+h, z+h],
+            i=[0, 1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 1], j=[1, 2, 3, 0, 4, 5, 6, 7, 4, 0, 4, 5], k=[4, 5, 6, 7, 1, 2, 3, 0, 5, 6, 1, 2],
+            opacity=1, color=kolor, flatshading=True, showlegend=False, hoverinfo='skip'
         ))
-
-    def dodaj_solidna_bryle(x, y, z, l, w, h, kolor, show_edges=True):
-        # Definiujemy 6 ścian jako płaszczyzny Scatter3d (Góra, Dół, Przód, Tył, Lewo, Prawo)
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, show_edges)
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z, z, z, z, z], kolor, show_edges)
-        rysuj_sciane([x, x+l, x+l, x, x], [y, y, y, y, y], [z, z, z+h, z+h, z], kolor, show_edges)
-        rysuj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, show_edges)
-        rysuj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges)
-        rysuj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, show_edges)
+        if show_edges:
+            lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
+            ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
+            lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
+            fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2.5), showlegend=False, hoverinfo='skip'))
 
     if is_pallet:
         pallet_color = "#4E342E"
-        # Konstrukcja palety EURO
-        for y_off in [0, 350, 700]: # Płozy dolne
-            dodaj_solidna_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, show_edges=False)
-        for x_off in [0, 525, 1050]: # Wsporniki (klocki)
-            for y_off in [0, 350, 700]:
-                dodaj_solidna_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, show_edges=False)
-        for y_off in [0, 175, 350, 525, 700]: # Deski wierzchnie
-            dodaj_solidna_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, show_edges=False)
+        for y_off in [0, 350, 700]: dodaj_bryle(0, y_off, -144, 1200, 100, 22, pallet_color, False) # Płozy
+        for x_off in [0, 525, 1050]: 
+            for y_off in [0, 350, 700]: dodaj_bryle(x_off, y_off, -122, 150, 100, 78, pallet_color, False) # Klocki
+        for y_off in [0, 175, 350, 525, 700]: dodaj_bryle(0, y_off, -44, 1200, 100, 44, pallet_color, False) # Deski
 
     for b in bloki:
         x0, y0, z0 = b['pos']
@@ -143,29 +132,24 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
-                    dodaj_solidna_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU, show_edges=True)
+                    dodaj_bryle(x0 + ix*l, y0 + iy*w, z0 + iz*h, l, w, h, KOLOR_KARTONU)
     
     fig.update_layout(
-        scene=dict(
-            aspectmode='data',
-            xaxis=dict(gridcolor="rgb(230, 230, 230)", showbackground=True, backgroundcolor="rgb(250, 250, 250)"),
-            yaxis=dict(gridcolor="rgb(230, 230, 230)", showbackground=True, backgroundcolor="rgb(250, 250, 250)"),
-            zaxis=dict(gridcolor="rgb(200, 200, 200)", showbackground=True, backgroundcolor="rgb(240, 240, 240)"),
-            camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
-        ),
+        scene=dict(aspectmode='data', camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))),
         margin=dict(l=10, r=10, b=10, t=10),
         paper_bgcolor="white",
-        plot_bgcolor="white",
         shapes=[dict(type="rect", xref="paper", yref="paper", x0=0, y0=0, x1=1, y1=1, line=dict(color="#e0e0e0", width=2))]
     )
     return fig
 
 # --- LOGIKA OPTYMALIZACJI ---
+def get_orientations(L, W, H):
+    return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
+
 def optymalizuj_paczke(n, L, W, H, k_name):
     k = KURIERZY[k_name]
     wyniki = []
-    for rl, rw, rh in {(L,W,H), (L,H,W), (W,L,H), (W,H,L), (H,L,W), (H,W,L)}:
-        if rl == 0 or rw == 0 or rh == 0: continue
+    for rl, rw, rh in get_orientations(L, W, H):
         for nx in range(1, n + 1):
             for ny in range(1, (n // nx) + 1):
                 if n % (nx * ny) == 0:
@@ -173,71 +157,92 @@ def optymalizuj_paczke(n, L, W, H, k_name):
                     fL, fW, fH = rl*nx, rw*ny, rh*nz
                     ds = sorted([fL, fW, fH], reverse=True)
                     girth = ds[0] + 2*ds[1] + 2*ds[2]
-                    if "Paczkomat" in k_name or "Orlen Paczka" in k_name: ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
+                    if "Paczkomat" in k_name: ok = (fL <= k["L"] and fW <= k["W"] and fH <= k["H"])
                     else: ok = (ds[0] <= k["max_L"] and girth <= k["max_G"])
                     if ok:
                         score = abs(fL-fW) + abs(fW-fH) + abs(fL-fH)
                         wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
     return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
-def optymalizuj_palete(L, W, H, h_max):
+# --- NOWY SILNIK: MIESZANE RZĘDY (Agresywne wypełnianie) ---
+def optymalizuj_palete_zaawansowana(L, W, H, h_max):
     PL, PW = 1200, 800
-    best_n = 0; best_layout = []
-    orient = list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
+    best_n = 0
+    best_layout = []
+    orient = get_orientations(L, W, H)
+
     for ol_base, ow_base, oh_base in orient:
         nz = h_max // oh_base
         if nz == 0: continue
-        for sx in range(0, PL + 1, 50):
-            for sy in range(0, PW + 1, 50):
-                current_layout = []
-                current_total_layer = 0
-                quads = [(0, 0, sx, sy), (sx, 0, PL, sy), (0, sy, sx, PW), (sx, sy, PL, PW)]
-                for qminx, qminy, qmaxx, qmaxy in quads:
-                    qw, qh = qmaxx - qminx, qmaxy - qminy
-                    best_q_n = -1; best_q_orient = None
-                    for ol, ow, oh in orient:
-                        if oh != oh_base: continue
-                        nx, ny = qw // ol, qh // ow
-                        if nx * ny > best_q_n:
-                            best_q_n = nx * ny
-                            best_q_orient = (int(nx), int(ny), ol, ow)
-                    if best_q_orient and best_q_n > 0:
-                        nx, ny, ol, ow = best_q_orient
-                        current_layout.append({'pos': (qminx, qminy, 0), 'dims': (ol, ow, oh_base), 'count': (nx, ny, int(nz))})
-                        current_total_layer += nx * ny
-                if current_total_layer * nz > best_n:
-                    best_n = current_total_layer * nz
-                    best_layout = current_layout
+        
+        # Testujemy mieszanie orientacji wzdłuż osi Y (800mm)
+        # i1 rzędów boku A + i2 rzędów boku B
+        for o1 in orient:
+            if o1[2] != oh_base: continue
+            for o2 in orient:
+                if o2[2] != oh_base: continue
+                
+                # Próbujemy różnych kombinacji rzędów wzdłuż szerokości palety (800)
+                max_r1 = PW // o1[1]
+                for r1 in range(max_r1 + 1):
+                    rem_y = PW - (r1 * o1[1])
+                    r2 = rem_y // o2[1]
+                    
+                    # Ile sztuk wejdzie wzdłuż długości (1200)?
+                    nx1 = PL // o1[0]
+                    nx2 = PL // o2[0]
+                    
+                    total = (r1 * nx1 + r2 * nx2) * nz
+                    if total > best_n:
+                        best_n = total
+                        best_layout = [
+                            {'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(r1), int(nz))},
+                            {'pos': (0, r1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(r2), int(nz))}
+                        ]
+                        
+        # Powtarzamy test dla osi X (1200mm)
+        for o1 in orient:
+            if o1[2] != oh_base: continue
+            for o2 in orient:
+                if o2[2] != oh_base: continue
+                max_c1 = PL // o1[0]
+                for c1 in range(max_c1 + 1):
+                    rem_x = PL - (c1 * o1[0])
+                    c2 = rem_x // o2[0]
+                    ny1 = PW // o1[1]
+                    ny2 = PW // o2[1]
+                    total = (c1 * ny1 + c2 * ny2) * nz
+                    if total > best_n:
+                        best_n = total
+                        best_layout = [
+                            {'pos': (0, 0, 0), 'dims': o1, 'count': (int(c1), int(ny1), int(nz))},
+                            {'pos': (c1*o1[0], 0, 0), 'dims': o2, 'count': (int(c2), int(ny2), int(nz))}
+                        ]
+
     return best_layout, best_n
 
 # --- WIDOK ---
 c1, c2 = st.columns([1, 1.5])
-if tryb == "📦 Paczka Kurierska":
+if tryb == "Paczka Kurierska":
     res = optymalizuj_paczke(sztuk, L, W, H, kurier_name)
     if res:
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
         with c1:
             st.subheader("📋 Instrukcja")
-            st.success(f"Spięto: **{sztuk} sztuk**")
-            st.write(f"- Ułożenie: **{rl}x{rw} mm**")
-            st.write(f"- Układ: **{nx} x {ny} x {nz}**")
-            st.info(f"Finał: **{res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm**")
-        with c2:
-            st.plotly_chart(rysuj_layout_3d([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
-    else:
-        st.error("❌ Przekroczono limity kuriera!")
+            st.success(f"Spięto: **{sztuk} szt.**")
+            st.write(f"- Ułożenie bazy: {rl}x{rw} mm")
+            st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
+        with c2: st.plotly_chart(rysuj_layout_3d([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
 else:
-    layout, total = optymalizuj_palete(L, W, H, h_max)
+    layout, total = optymalizuj_palete_zaawansowana(L, W, H, h_max)
     if total > 0:
         with c1:
             st.subheader("📋 Plan Palety")
-            st.success(f"Razem: **{total} sztuk**")
+            st.success(f"Razem: **{total} szt.**")
+            st.write("Algorytm dobrał mieszane rzędy, aby zminimalizować luki.")
             st.divider()
             for i, b in enumerate(layout):
-                szt_sek = b['count'][0] * b['count'][1] * b['count'][2]
-                if szt_sek > 0:
-                    st.write(f"**Sekcja {i+1} ({szt_sek} szt.):** {b['dims'][0]}x{b['dims'][1]} mm")
-        with c2:
-            st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
-    else:
-        st.error("❌ Karton nie mieści się na palecie!")
+                szt = b['count'][0]*b['count'][1]*b['count'][2]
+                if szt > 0:
+                    st.write(f"**Sekcja {i+1} ({szt} szt.):** {b['dims'][0]}x{b['dims'][1]} mm")
+        with c2: st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
