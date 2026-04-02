@@ -105,7 +105,6 @@ def rysuj_layout_3d(bloki, is_pallet=False):
     fig = go.Figure()
     
     if is_pallet:
-        # Paleta EURO (Brązowa, solidna podstawa)
         fig.add_trace(go.Mesh3d(
             x=[0,1200,1200,0,0,1200,1200,0], y=[0,0,800,800,0,0,800,800], z=[-144,-144,-144,-144,0,0,0,0],
             i=[0,1,2,3,0,4,5,6,7,4,0,1], j=[1,2,3,0,4,5,6,7,4,0,4,5], k=[4,5,6,7,1,2,3,0,5,6,1,2],
@@ -117,7 +116,6 @@ def rysuj_layout_3d(bloki, is_pallet=False):
         l, w, h = b['dims']
         nx, ny, nz = b['count']
         
-        # Tworzymy każdy karton w sekcji osobno, aby uniknąć błędów graficznych
         for ix in range(nx):
             for iy in range(ny):
                 for iz in range(nz):
@@ -125,7 +123,6 @@ def rysuj_layout_3d(bloki, is_pallet=False):
                     y = y0 + iy * w
                     z = z0 + iz * h
                     
-                    # Definicja solidnej bryły kartonu
                     fig.add_trace(go.Mesh3d(
                         x=[x, x+l, x+l, x, x, x+l, x+l, x],
                         y=[y, y, y+w, y+w, y, y, y+w, y+w],
@@ -138,7 +135,6 @@ def rysuj_layout_3d(bloki, is_pallet=False):
                         showlegend=False
                     ))
                     
-                    # Czarne krawędzie dla każdego kartonu osobno (lepsza widoczność)
                     lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
                     ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
                     lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
@@ -147,17 +143,18 @@ def rysuj_layout_3d(bloki, is_pallet=False):
     fig.update_layout(
         scene=dict(
             aspectmode='data',
-            xaxis_title='Długość (mm)', yaxis_title='Szerokość (mm)', zaxis_title='Wysokość (mm)',
+            xaxis_title='Dł (mm)', yaxis_title='Szer (mm)', zaxis_title='Wys (mm)',
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.2))
         ),
         margin=dict(l=0, r=0, b=0, t=0)
     )
     return fig
 
-# --- LOGIKA OPTYMALIZACJI (Nienaruszona) ---
+# --- LOGIKA OPTYMALIZACJI ---
 def optymalizuj_paczke(n, L, W, H, k_name):
     k = KURIERZY[k_name]
     wyniki = []
+    # Sprawdzamy wszystkie 6 orientacji kartonu jako bazy spięcia
     for rl, rw, rh in {(L,W,H), (L,H,W), (W,L,H), (W,H,L), (H,L,W), (H,W,L)}:
         if rl == 0 or rw == 0 or rh == 0: continue
         for nx in range(1, n + 1):
@@ -177,34 +174,60 @@ def optymalizuj_paczke(n, L, W, H, k_name):
     return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
 def optymalizuj_palete(L, W, H, h_max):
-    best_n = 0; best_layout = []
-    orient = list({(L,W,H), (L,H,W), (W,L,H), (W,H,L), (H,L,W), (H,W,L)})
-    for ol1, ow1, oh1 in orient:
-        nz1 = h_max // oh1
-        if nz1 == 0: continue
-        for ol2, ow2, oh2 in orient:
-            nz2 = h_max // oh2
-            if nz2 == 0: continue
-            for sx in range(0, 1201, 20):
-                nxa, nya = sx // ol1, 800 // ow1
-                nxb, nyb = (1200 - (nxa * ol1)) // ol2, 800 // ow2
-                sztuk = (nxa * nya * nz1) + (nxb * nyb * nz2)
-                if sztuk > best_n:
-                    best_n = sztuk
-                    best_layout = [
-                        {'pos': (0,0,0), 'dims': (ol1, ow1, oh1), 'count': (int(nxa), int(nya), int(nz1))},
-                        {'pos': (nxa*ol1, 0, 0), 'dims': (ol2, ow2, oh2), 'count': (int(nxb), int(nyb), int(nz2))}
-                    ]
-            for sy in range(0, 801, 20):
-                nxa, nya = 1200 // ol1, sy // ow1
-                nxb, nyb = 1200 // ol2, (800 - (nya * ow1)) // ow2
-                sztuk = (nxa * nya * nz1) + (nxb * nyb * nz2)
-                if sztuk > best_n:
-                    best_n = sztuk
-                    best_layout = [
-                        {'pos': (0,0,0), 'dims': (ol1, ow1, oh1), 'count': (int(nxa), int(nya), int(nz1))},
-                        {'pos': (0, nya*ow1, 0), 'dims': (ol2, ow2, oh2), 'count': (int(nxb), int(nyb), int(nz2))}
-                    ]
+    PL, PW = 1200, 800
+    best_n = 0
+    best_layout = []
+    
+    # Wszystkie możliwe orientacje kartonu
+    orient = list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
+
+    # Pętla po orientacji bazowej (wysokość warstwy)
+    for ol_base, ow_base, oh_base in orient:
+        nz = h_max // oh_base
+        if nz == 0: continue
+        
+        # Algorytm 4-blokowy (Pinwheel) - szukamy punktu podziału sx, sy
+        # Próbujemy co 50mm dla szybkości i precyzji
+        for sx in range(0, PL + 1, 50):
+            for sy in range(0, PW + 1, 50):
+                # Dla każdego z 4 kwadrantów szukamy najlepszej orientacji (z zachowaniem oh_base)
+                current_layout = []
+                current_total_layer = 0
+                
+                # Kwadranty: [xmin, ymin, xmax, ymax]
+                quads = [
+                    (0, 0, sx, sy),
+                    (sx, 0, PL, sy),
+                    (0, sy, sx, PW),
+                    (sx, sy, PL, PW)
+                ]
+                
+                for qminx, qminy, qmaxx, qmaxy in quads:
+                    qw, qh = qmaxx - qminx, qmaxy - qminy
+                    best_q_n = -1
+                    best_q_orient = None
+                    
+                    # Sprawdź orientacje, które pasują do wysokości warstwy oh_base
+                    for ol, ow, oh in orient:
+                        if oh != oh_base: continue
+                        nx, ny = qw // ol, qh // ow
+                        if nx * ny > best_q_n:
+                            best_q_n = nx * ny
+                            best_q_orient = (int(nx), int(ny), ol, ow)
+                    
+                    if best_q_orient and best_q_n > 0:
+                        nx, ny, ol, ow = best_q_orient
+                        current_layout.append({
+                            'pos': (qminx, qminy, 0),
+                            'dims': (ol, ow, oh_base),
+                            'count': (nx, ny, int(nz))
+                        })
+                        current_total_layer += nx * ny
+                
+                if current_total_layer * nz > best_n:
+                    best_n = current_total_layer * nz
+                    best_layout = current_layout
+                    
     return best_layout, best_n
 
 # --- WIDOK ---
@@ -224,18 +247,20 @@ if tryb == "📦 Paczka Kurierska":
     else:
         st.error("❌ Przekroczono limity kuriera!")
 else:
+    # Uruchomienie ekstremalnej optymalizacji
     layout, total = optymalizuj_palete(L, W, H, h_max)
     if total > 0:
         with c1:
             st.subheader("📋 Plan Palety")
             st.success(f"Razem: **{total} sztuk**")
+            st.write("Wykorzystano układ wielostrefowy (Pinwheel), aby wypełnić luki w środku palety.")
             st.divider()
             for i, b in enumerate(layout):
                 szt_sek = b['count'][0] * b['count'][1] * b['count'][2]
                 if szt_sek > 0:
                     st.write(f"**Sekcja {i+1} ({szt_sek} szt.):**")
                     st.write(f"- Układ kartonu: **{b['dims'][0]}x{b['dims'][1]} mm**")
-                    st.write(f"- W rzędzie: {b['count'][0]}, Kolumn: {b['count'][1]}, Warstw: {b['count'][2]}")
+                    st.write(f"- Rzędy: {b['count'][0]}, Kolumny: {b['count'][1]}, Warstwy: {b['count'][2]}")
         with c2:
             st.plotly_chart(rysuj_layout_3d(layout, is_pallet=True), use_container_width=True)
     else:
