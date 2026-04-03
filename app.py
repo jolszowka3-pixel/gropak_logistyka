@@ -1,6 +1,13 @@
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+import hashlib
+
+try:
+    from py3dbp import Packer, Bin, Item
+except ImportError:
+    st.error("🚨 Brak wymaganej biblioteki! Wpisz w terminalu: pip install py3dbp")
+    st.stop()
 
 # --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
@@ -21,7 +28,7 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Zew: wew + 5mm) ---
+# --- 2. PEŁNA BAZA TWOICH KARTONÓW ---
 PUDEŁKA_GROPAK = {
     "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
     "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
@@ -49,43 +56,78 @@ PUDEŁKA_GROPAK = {
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0}
 }
 
-KOLOR_KARTONU = "#C19A6B"
-TOLERANCJA_H = 50 # Klucz do 64 sztuk A11
+KOLOR_BAZOWY = "#C19A6B"
+PALETA_KOLOROW = ["#C19A6B", "#D2B48C", "#E6C280", "#B8860B", "#CD853F", "#DEB887", "#F4A460", "#D2691E", "#A0522D"]
+
+def generuj_kolor(nazwa):
+    # Generuje stały odcień z palety na podstawie nazwy kartonu (dla wizualnego odróżnienia miksu)
+    idx = int(hashlib.sha256(nazwa.encode('utf-8')).hexdigest(), 16) % len(PALETA_KOLOROW)
+    return PALETA_KOLOROW[idx]
+
+# --- INICJALIZACJA KOSZYKA W SESJI ---
+if 'koszyk' not in st.session_state:
+    st.session_state['koszyk'] = []
 
 st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: Optymalizacja Wysyłek")
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("1. Towar")
-    wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
-    if wybrane == "Własny wymiar...":
-        L = st.number_input("Dł zew (mm)", 10); W = st.number_input("Szer zew (mm)", 10); H = st.number_input("Wys zew (mm)", 10)
-    else:
-        p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
-    
+    st.header("1. Tryb Pracy")
+    tryb = st.radio("Metoda:", ["📦 Paczka Kurierska (1 rodzaj)", "🚛 Paleta EURO (Miks Kartonów)"])
     st.divider()
-    st.header("2. Parametry")
-    tryb = st.radio("Metoda:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
 
-    if tryb == "📦 Paczka Kurierska":
+    if tryb == "📦 Paczka Kurierska (1 rodzaj)":
+        st.header("2. Towar i Kurier")
+        wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
+        if wybrane == "Własny wymiar...":
+            L = st.number_input("Dł zew (mm)", 10, value=100); W = st.number_input("Szer zew (mm)", 10, value=100); H = st.number_input("Wys zew (mm)", 10, value=100)
+        else:
+            p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
+        
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
-    else:
-        # ZMIENIONO LIMIT Z 2500 NA 3500
-        h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 3500, 2000)
 
-# --- 3. WIZUALIZACJA (PANCERNA, SOLIDNA, BEZ TRÓJKĄTÓW) ---
+    else:
+        st.header("2. Koszyk na Paletę")
+        h_max = st.number_input("Maks. wysokość towaru na palecie (mm):", 100, 3500, 2000)
+        st.divider()
+        
+        # Formularz dodawania do koszyka
+        with st.form("dodaj_towar"):
+            st.subheader("Dodaj asortyment")
+            wybrane_miks = st.selectbox("Rodzaj kartonu:", list(PUDEŁKA_GROPAK.keys()))
+            col_l, col_w, col_h = st.columns(3)
+            with col_l: L_miks = st.number_input("Dł (mm)", 0, value=PUDEŁKA_GROPAK[wybrane_miks]["L"])
+            with col_w: W_miks = st.number_input("Sz (mm)", 0, value=PUDEŁKA_GROPAK[wybrane_miks]["W"])
+            with col_h: H_miks = st.number_input("Wy (mm)", 0, value=PUDEŁKA_GROPAK[wybrane_miks]["H"])
+            
+            sztuk_miks = st.number_input("Ilość sztuk:", 1, 1000, 10)
+            
+            if st.form_submit_button("➕ Dodaj do palety"):
+                nazwa = wybrane_miks if wybrane_miks != "Własny wymiar..." else f"Custom {L_miks}x{W_miks}x{H_miks}"
+                st.session_state['koszyk'].append({"nazwa": nazwa, "L": L_miks, "W": W_miks, "H": H_miks, "ilosc": sztuk_miks})
+                st.rerun()
+
+        # Wyświetlanie zawartości koszyka
+        if st.session_state['koszyk']:
+            st.write("🛒 **Aktualny załadunek:**")
+            for idx, item in enumerate(st.session_state['koszyk']):
+                st.caption(f"- {item['ilosc']}x {item['nazwa']}")
+            
+            if st.button("🗑️ Wyczyść paletę"):
+                st.session_state['koszyk'] = []
+                st.rerun()
+
+# --- 3. WIZUALIZACJA 3D ---
 def rysuj_layout(bloki, is_pallet=False):
     fig = go.Figure()
     
     def dodaj_sciane(x, y, z, kolor, sa):
-        # opacity=1 i line_width=0 daje efekt pełnej, solidnej bryły bez skosów
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
             surfaceaxis=sa, surfacecolor=kolor,
-            opacity=1, # KARTONY SĄ TERAZ PEŁNE (NIEPRZEZROCZYSTE)
-            line=dict(width=0), 
+            opacity=1, line=dict(width=0), 
             showlegend=False, hoverinfo='skip'
         ))
 
@@ -102,8 +144,7 @@ def rysuj_layout(bloki, is_pallet=False):
         dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, 1)
         dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
         dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
-        if border:
-            dodaj_krawedzie(x, y, z, l, w, h)
+        if border: dodaj_krawedzie(x, y, z, l, w, h)
 
     if is_pallet:
         pc = "#4E342E"
@@ -114,10 +155,11 @@ def rysuj_layout(bloki, is_pallet=False):
 
     for b in bloki:
         x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
+        kolor = b.get('color', KOLOR_BAZOWY)
         for ix in range(b['count'][0]):
             for iy in range(b['count'][1]):
                 for iz in range(b['count'][2]):
-                    dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, KOLOR_KARTONU)
+                    dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, kolor)
     
     hide = dict(showbackground=False, visible=False)
     fig.update_layout(
@@ -150,28 +192,39 @@ def optymalizuj_paczke(n, L, W, H, k_name):
                         wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
     return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
-def optymalizuj_palete_maksymalna(L, W, H, h_max):
-    PL, PW = 1200, 800
-    orient = get_orientations(L, W, H)
-    best_total = 0; best_layout = []
-    for o1 in orient:
-        for o2 in orient:
-            for n1 in range(PW // o1[1] + 1):
-                rem_y = PW - n1*o1[1]
-                n2 = rem_y // o2[1]
-                nx1, nx2 = PL // o1[0], PL // o2[0]
-                nz1 = (h_max + TOLERANCJA_H) // o1[2]
-                nz2 = (h_max + TOLERANCJA_H) // o2[2]
-                total = (nx1 * n1 * nz1) + (nx2 * n2 * nz2)
-                if total > best_total:
-                    best_total = total
-                    best_layout = [{'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
-                                   {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}]
-    return best_layout, best_total
+def optymalizuj_palete_miks(koszyk, h_max):
+    packer = Packer()
+    # Ignorujemy wagę fizyczną (999999 kg)
+    packer.add_bin(Bin('Paleta EURO', 1200, 800, h_max, 999999.0))
 
-# --- 5. INTERFEJS ---
-c1, c2 = st.columns([1, 1.5])
-if tryb == "📦 Paczka Kurierska":
+    for item in koszyk:
+        for i in range(item['ilosc']):
+            # Symboliczna waga 0.1
+            packer.add_item(Item(item['nazwa'], item['L'], item['W'], item['H'], 0.1))
+
+    packer.pack()
+    paleta = packer.bins[0]
+    
+    layout = []
+    for fitted_item in paleta.items:
+        x, y, z = [int(v) for v in fitted_item.position]
+        w, h, d = [int(v) for v in fitted_item.get_dimension()]
+        layout.append({
+            'pos': (x, y, z),
+            'dims': (w, h, d),
+            'count': (1, 1, 1),
+            'color': generuj_kolor(fitted_item.name),
+            'name': fitted_item.name
+        })
+        
+    zapakowane = len(paleta.items)
+    odrzucone = len(paleta.unfitted_items)
+    return layout, zapakowane, odrzucone
+
+# --- 5. INTERFEJS GŁÓWNY ---
+c1, c2 = st.columns([1, 2])
+
+if tryb == "📦 Paczka Kurierska (1 rodzaj)":
     res = optymalizuj_paczke(sztuk, L, W, H, kurier_name)
     if res:
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
@@ -182,16 +235,25 @@ if tryb == "📦 Paczka Kurierska":
             st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
         with c2: st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
     else: st.error("Nie mieści się!")
+
 else:
-    layout, total = optymalizuj_palete_maksymalna(L, W, H, h_max)
-    if total > 0:
+    if not st.session_state['koszyk']:
+        st.info("👈 Dodaj kartony do palety w panelu bocznym.")
+    else:
+        layout, spakowane, odrzucone = optymalizuj_palete_miks(st.session_state['koszyk'], h_max)
+        
         with c1:
-            st.subheader("📋 Plan Palety")
-            st.success(f"Suma: **{total} sztuk**")
-            real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0])
-            st.write(f"Wysokość towaru: {real_h} mm")
+            st.subheader("📋 Status Palety")
+            st.success(f"Ułożono sztuk: **{spakowane}**")
+            if odrzucone > 0:
+                st.error(f"⚠️ Nie zmieściło się: **{odrzucone}** szt. (przekroczono limit wysokości {h_max} mm)")
+            
             st.divider()
-            for i, b in enumerate(layout):
-                s = b['count'][0]*b['count'][1]*b['count'][2]
-                if s > 0: st.write(f"**Sekcja {i+1}** ({s} szt.): {b['dims'][0]}x{b['dims'][1]} mm")
-        with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
+            st.write("**Legenda ułożenia:**")
+            # Unikalne nazwy dla legendy
+            unikalne_pudelka = {b['name']: b['color'] for b in layout}
+            for nazwa, kolor in unikalne_pudelka.items():
+                st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:5px;"><div style="width:15px; height:15px; background-color:{kolor}; border:1px solid #000; margin-right:10px;"></div>{nazwa}</div>', unsafe_allow_html=True)
+                
+        with c2: 
+            st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
