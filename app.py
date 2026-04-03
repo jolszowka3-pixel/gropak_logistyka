@@ -1,8 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
-import hashlib
 import numpy as np
-import math
 
 # --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
@@ -23,7 +21,7 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. BAZA KARTONÓW ---
+# --- 2. PEŁNA BAZA TWOICH KARTONÓW (Zew: wew + 5mm) ---
 PUDEŁKA_GROPAK = {
     "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
     "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
@@ -51,81 +49,43 @@ PUDEŁKA_GROPAK = {
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0}
 }
 
-PALETA_KOLOROW = ["#C19A6B", "#D2B48C", "#E6C280", "#B8860B", "#CD853F", "#DEB887", "#F4A460", "#D2691E", "#A0522D"]
-
-def generuj_kolor(nazwa):
-    idx = int(hashlib.sha256(nazwa.encode('utf-8')).hexdigest(), 16) % len(PALETA_KOLOROW)
-    return PALETA_KOLOROW[idx]
-
-if 'koszyk' not in st.session_state:
-    st.session_state['koszyk'] = []
+KOLOR_KARTONU = "#C19A6B"
+TOLERANCJA_H = 50 # Klucz do 64 sztuk A11
 
 st.set_page_config(page_title="Gropak Master Pro", layout="wide")
 st.title("📦 Gropak: Optymalizacja Wysyłek")
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.header("1. Tryb Pracy")
-    tryb = st.radio("Metoda:", ["📦 Paczka Kurierska (1 rodzaj)", "🚛 Paleta EURO (Miks Kartonów)"])
+    st.header("1. Towar")
+    wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
+    if wybrane == "Własny wymiar...":
+        L = st.number_input("Dł zew (mm)", 10); W = st.number_input("Szer zew (mm)", 10); H = st.number_input("Wys zew (mm)", 10)
+    else:
+        p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
+    
     st.divider()
+    st.header("2. Parametry")
+    tryb = st.radio("Metoda:", ["📦 Paczka Kurierska", "🚛 Paleta EURO"])
 
-    if tryb == "📦 Paczka Kurierska (1 rodzaj)":
-        st.header("2. Towar i Kurier")
-        wybrane = st.selectbox("Wybierz karton:", list(PUDEŁKA_GROPAK.keys()))
-        if wybrane == "Własny wymiar...":
-            L = st.number_input("Dł zew (mm)", 10, value=100); W = st.number_input("Szer zew (mm)", 10, value=100); H = st.number_input("Wys zew (mm)", 10, value=100)
-        else:
-            p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
-            st.info(f"📏 Wymiary z bazy: **{L} x {W} x {H} mm**")
-        
+    if tryb == "📦 Paczka Kurierska":
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
-
     else:
-        st.header("2. Koszyk na Paletę")
-        h_max = st.number_input("Maks. wysokość towaru na palecie (mm):", 100, 3500, 2000)
-        st.divider()
-        
-        st.subheader("Dodaj asortyment")
-        wybrane_miks = st.selectbox("Rodzaj kartonu:", list(PUDEŁKA_GROPAK.keys()))
-        
-        if wybrane_miks == "Własny wymiar...":
-            col_l, col_w, col_h = st.columns(3)
-            with col_l: L_miks = st.number_input("Dł (mm)", 1, value=100)
-            with col_w: W_miks = st.number_input("Sz (mm)", 1, value=100)
-            with col_h: H_miks = st.number_input("Wy (mm)", 1, value=100)
-        else:
-            L_miks = PUDEŁKA_GROPAK[wybrane_miks]["L"]
-            W_miks = PUDEŁKA_GROPAK[wybrane_miks]["W"]
-            H_miks = PUDEŁKA_GROPAK[wybrane_miks]["H"]
-            st.info(f"📏 Wymiary z bazy: **{L_miks} x {W_miks} x {H_miks} mm**")
-            
-        sztuk_miks = st.number_input("Ilość sztuk:", 1, 1000, 10)
-        
-        if st.button("➕ Dodaj do palety", use_container_width=True):
-            nazwa = wybrane_miks if wybrane_miks != "Własny wymiar..." else f"Custom {L_miks}x{W_miks}x{H_miks}"
-            st.session_state['koszyk'].append({"nazwa": nazwa, "L": L_miks, "W": W_miks, "H": H_miks, "ilosc": sztuk_miks})
-            st.rerun()
+        # ZMIENIONO LIMIT Z 2500 NA 3500
+        h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 3500, 2000)
 
-        st.divider()
-        if st.session_state['koszyk']:
-            st.write("🛒 **Aktualny załadunek:**")
-            for idx, item in enumerate(st.session_state['koszyk']):
-                st.caption(f"- {item['ilosc']}x {item['nazwa']}")
-            
-            if st.button("🗑️ Wyczyść paletę"):
-                st.session_state['koszyk'] = []
-                st.rerun()
-
-# --- 3. WIZUALIZACJA 3D ---
+# --- 3. WIZUALIZACJA (PANCERNA, SOLIDNA, BEZ TRÓJKĄTÓW) ---
 def rysuj_layout(bloki, is_pallet=False):
     fig = go.Figure()
     
     def dodaj_sciane(x, y, z, kolor, sa):
+        # opacity=1 i line_width=0 daje efekt pełnej, solidnej bryły bez skosów
         fig.add_trace(go.Scatter3d(
             x=x, y=y, z=z, mode='lines',
             surfaceaxis=sa, surfacecolor=kolor,
-            opacity=1, line=dict(width=0), 
+            opacity=1, # KARTONY SĄ TERAZ PEŁNE (NIEPRZEZROCZYSTE)
+            line=dict(width=0), 
             showlegend=False, hoverinfo='skip'
         ))
 
@@ -133,7 +93,7 @@ def rysuj_layout(bloki, is_pallet=False):
         lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
         ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
         lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
-        fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=3), showlegend=False, hoverinfo='skip'))
+        fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False, hoverinfo='skip'))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
         dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, 2)
@@ -142,7 +102,8 @@ def rysuj_layout(bloki, is_pallet=False):
         dodaj_sciane([x, x+l, x+l, x, x], [y+w, y+w, y+w, y+w, y+w], [z, z, z+h, z+h, z], kolor, 1)
         dodaj_sciane([x, x, x, x, x], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
         dodaj_sciane([x+l, x+l, x+l, x+l, x+l], [y, y, y+w, y+w, y], [z, z+h, z+h, z, z], kolor, 0)
-        if border: dodaj_krawedzie(x, y, z, l, w, h)
+        if border:
+            dodaj_krawedzie(x, y, z, l, w, h)
 
     if is_pallet:
         pc = "#4E342E"
@@ -153,11 +114,10 @@ def rysuj_layout(bloki, is_pallet=False):
 
     for b in bloki:
         x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
-        kolor = b.get('color', "#C19A6B")
         for ix in range(b['count'][0]):
             for iy in range(b['count'][1]):
                 for iz in range(b['count'][2]):
-                    dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, kolor)
+                    dodaj_bryle(x0+ix*dl, y0+iy*sz, z0+iz*wy, dl, sz, wy, KOLOR_KARTONU)
     
     hide = dict(showbackground=False, visible=False)
     fig.update_layout(
@@ -167,147 +127,7 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA: Z-MAP ENGINE V3 (PERFECT FIT & INTERLEAVING) ---
-class PaletaZMap:
-    def __init__(self, w=1200, d=800, h_max=2000):
-        self.w = w
-        self.d = d
-        self.h_max = h_max
-        # KROK SIATKI = 5 mm (Idealne dopasowanie dla bazy Gropak)
-        self.step = 5
-        self.grid_w = w // self.step
-        self.grid_d = d // self.step
-        self.height_map = np.zeros((self.grid_w, self.grid_d), dtype=int)
-        self.items = []
-
-    def check_fit(self, gw, gd, h):
-        best_z = float('inf')
-        best_score = float('inf')
-        best_pos = None
-
-        for x in range(self.grid_w - gw + 1):
-            for y in range(self.grid_d - gd + 1):
-                # Pruning - omijamy miejsca, które od razu są wyższe niż nasz najlepszy wynik
-                if self.height_map[x, y] > best_z: 
-                    continue
-                
-                subgrid = self.height_map[x:x+gw, y:y+gd]
-                max_z = np.max(subgrid)
-
-                if max_z <= best_z and max_z + h <= self.h_max:
-                    # Łagodniejszy warunek stabilności: 45% oparcia pozwala na wchodzenie w luki
-                    support_area = np.sum(subgrid == max_z)
-                    if support_area >= 0.45 * (gw * gd):
-                        # Szukamy najniższego punktu, a w przypadku remisu dociskamy do rogu (x+y)
-                        score = max_z * 100000 + (x + y)
-                        if score < best_score:
-                            best_score = score
-                            best_z = max_z
-                            best_pos = (x, y, max_z)
-        return best_pos
-
-    def pack_item(self, item):
-        L, W, H = item['L'], item['W'], item['H']
-        gw_L = math.ceil(L / self.step)
-        gd_W = math.ceil(W / self.step)
-        gw_W = math.ceil(W / self.step)
-        gd_L = math.ceil(L / self.step)
-
-        # Test obu rotacji płaskich
-        pos1 = self.check_fit(gw_L, gd_W, H)
-        pos2 = self.check_fit(gw_W, gd_L, H)
-
-        best_pos = None
-        best_dim = None
-        gw, gd = 0, 0
-
-        # Wybór najbardziej kompaktowej opcji
-        if pos1 and pos2:
-            if pos1[2] <= pos2[2]:
-                best_pos, best_dim, gw, gd = pos1, (L, W, H), gw_L, gd_W
-            else:
-                best_pos, best_dim, gw, gd = pos2, (W, L, H), gw_W, gd_L
-        elif pos1:
-            best_pos, best_dim, gw, gd = pos1, (L, W, H), gw_L, gd_W
-        elif pos2:
-            best_pos, best_dim, gw, gd = pos2, (W, L, H), gw_W, gd_L
-
-        if best_pos:
-            x, y, z = best_pos
-            self.height_map[x:x+gw, y:y+gd] = z + H
-
-            self.items.append({
-                'pos': (x * self.step, y * self.step, z),
-                'dims': best_dim, 
-                'count': (1, 1, 1),
-                'name': item['nazwa'],
-                'color': item['color']
-            })
-            return True
-        return False
-
-def optymalizuj_palety_wielokrotne(koszyk, h_max):
-    elementy_flat = []
-    odrzucone_lista = []
-
-    for wpis in koszyk:
-        if wpis['H'] > h_max or max(wpis['L'], wpis['W']) > 1200 or min(wpis['L'], wpis['W']) > 800:
-            odrzucone_lista.append(wpis)
-            continue
-        for _ in range(wpis['ilosc']):
-            elementy_flat.append({
-                'nazwa': wpis['nazwa'], 'L': wpis['L'], 'W': wpis['W'], 'H': wpis['H'],
-                'color': generuj_kolor(wpis['nazwa'])
-            })
-
-    # --- ALGORYTM MIESZANIA (INTERLEAVING) ---
-    # Rozbijamy monolityczne bloki. Jeśli mamy 50xA11 i 50xB12, ułożymy je: A11, B12, A11, B12...
-    groups = {}
-    for item in elementy_flat:
-        groups.setdefault(item['nazwa'], []).append(item)
-
-    # Sortujemy grupy by zacząć przeplatanie od największych gabarytów bazy (dla stabilności)
-    sorted_group_keys = sorted(groups.keys(), key=lambda k: groups[k][0]['L'] * groups[k][0]['W'], reverse=True)
-
-    elementy_mixed = []
-    while True:
-        dodano_cokolwiek = False
-        for k in sorted_group_keys:
-            if groups[k]:
-                elementy_mixed.append(groups[k].pop(0))
-                dodano_cokolwiek = True
-        if not dodano_cokolwiek:
-            break
-    # -----------------------------------------
-
-    palety = []
-    aktualna_paleta = PaletaZMap(h_max=h_max)
-    niezapakowane_teraz = []
-
-    for item in elementy_mixed:
-        if not aktualna_paleta.pack_item(item):
-            niezapakowane_teraz.append(item)
-
-    if aktualna_paleta.items:
-        palety.append(aktualna_paleta.items)
-
-    while niezapakowane_teraz:
-        aktualna_paleta = PaletaZMap(h_max=h_max)
-        elementy_do_spakowania = niezapakowane_teraz
-        niezapakowane_teraz = []
-
-        for item in elementy_do_spakowania:
-            if not aktualna_paleta.pack_item(item):
-                niezapakowane_teraz.append(item)
-                
-        if len(aktualna_paleta.items) == 0:
-            odrzucone_lista.extend(niezapakowane_teraz)
-            break
-            
-        palety.append(aktualna_paleta.items)
-
-    return palety, odrzucone_lista
-
+# --- 4. LOGIKA ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -330,10 +150,28 @@ def optymalizuj_paczke(n, L, W, H, k_name):
                         wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
     return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
-# --- 5. INTERFEJS GŁÓWNY ---
-c1, c2 = st.columns([1, 2])
+def optymalizuj_palete_maksymalna(L, W, H, h_max):
+    PL, PW = 1200, 800
+    orient = get_orientations(L, W, H)
+    best_total = 0; best_layout = []
+    for o1 in orient:
+        for o2 in orient:
+            for n1 in range(PW // o1[1] + 1):
+                rem_y = PW - n1*o1[1]
+                n2 = rem_y // o2[1]
+                nx1, nx2 = PL // o1[0], PL // o2[0]
+                nz1 = (h_max + TOLERANCJA_H) // o1[2]
+                nz2 = (h_max + TOLERANCJA_H) // o2[2]
+                total = (nx1 * n1 * nz1) + (nx2 * n2 * nz2)
+                if total > best_total:
+                    best_total = total
+                    best_layout = [{'pos': (0, 0, 0), 'dims': o1, 'count': (int(nx1), int(n1), int(nz1))},
+                                   {'pos': (0, n1*o1[1], 0), 'dims': o2, 'count': (int(nx2), int(n2), int(nz2))}]
+    return best_layout, best_total
 
-if tryb == "📦 Paczka Kurierska (1 rodzaj)":
+# --- 5. INTERFEJS ---
+c1, c2 = st.columns([1, 1.5])
+if tryb == "📦 Paczka Kurierska":
     res = optymalizuj_paczke(sztuk, L, W, H, kurier_name)
     if res:
         nx, ny, nz = res['conf']; rl, rw, rh = res['dims']
@@ -344,35 +182,16 @@ if tryb == "📦 Paczka Kurierska (1 rodzaj)":
             st.info(f"Finał: {res['final'][0]}x{res['final'][1]}x{res['final'][2]} mm")
         with c2: st.plotly_chart(rysuj_layout([{'pos': (0,0,0), 'dims': (rl, rw, rh), 'count': (nx, ny, nz)}]), use_container_width=True)
     else: st.error("Nie mieści się!")
-
 else:
-    if not st.session_state['koszyk']:
-        st.info("👈 Dodaj kartony do palety w panelu bocznym.")
-    else:
-        with st.spinner("📦 Optymalizacja zaawansowana w toku (Siła: Przeplatanie + Z-Map)..."):
-            palety, odrzucone = optymalizuj_palety_wielokrotne(st.session_state['koszyk'], h_max)
-        
+    layout, total = optymalizuj_palete_maksymalna(L, W, H, h_max)
+    if total > 0:
         with c1:
-            st.subheader("📋 Podsumowanie Zlecenia")
-            st.success(f"📦 Zbudowano stabilnych palet: **{len(palety)}**")
-            
-            if odrzucone:
-                st.error("⚠️ Odrzucono (nie fizyczne do ułożenia):")
-                for err in odrzucone:
-                    st.caption(f"- {err['nazwa']} ({err['L']}x{err['W']}x{err['H']})")
-            
+            st.subheader("📋 Plan Palety")
+            st.success(f"Suma: **{total} sztuk**")
+            real_h = max([b['count'][2]*b['dims'][2] for b in layout if b['count'][2] > 0])
+            st.write(f"Wysokość towaru: {real_h} mm")
             st.divider()
-            st.write("**Legenda asortymentu:**")
-            unikalne = {}
-            for p in palety:
-                for b in p: unikalne[b['name']] = b['color']
-            for nazwa, kolor in unikalne.items():
-                st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:5px;"><div style="width:15px; height:15px; background-color:{kolor}; border:1px solid #000; margin-right:10px;"></div>{nazwa}</div>', unsafe_allow_html=True)
-                
-        with c2:
-            if palety:
-                zakladki = st.tabs([f"🚛 Paleta {i+1}" for i in range(len(palety))])
-                for i, paleta_layout in enumerate(palety):
-                    with zakladki[i]:
-                        st.write(f"**Zawartość: {len(paleta_layout)} sztuk** na tej palecie.")
-                        st.plotly_chart(rysuj_layout(paleta_layout, is_pallet=True), use_container_width=True)
+            for i, b in enumerate(layout):
+                s = b['count'][0]*b['count'][1]*b['count'][2]
+                if s > 0: st.write(f"**Sekcja {i+1}** ({s} szt.): {b['dims'][0]}x{b['dims'][1]} mm")
+        with c2: st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
