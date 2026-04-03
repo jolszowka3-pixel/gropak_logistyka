@@ -72,7 +72,8 @@ with st.sidebar:
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
     else:
-        h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 2500, 2000)
+        # ZMIENIONO LIMIT Z 2500 NA 3500
+        h_max = st.number_input("Maks. wysokość towaru (mm):", 100, 3500, 2000)
 
 # --- 3. WIZUALIZACJA (PANCERNA, SOLIDNA, BEZ TRÓJKĄTÓW) ---
 def rysuj_layout(bloki, is_pallet=False):
