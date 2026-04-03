@@ -1,6 +1,8 @@
 import streamlit as st
 import plotly.graph_objects as go
 import hashlib
+import numpy as np
+import math
 
 # --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
@@ -165,113 +167,133 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA: POPRAWIONY ALGORYTM WARSTWOWY ---
-class Prostokat:
-    def __init__(self, x, y, w, d):
-        self.x = x
-        self.y = y
+# --- 4. LOGIKA: Z-MAP ENGINE (GRAVITY & STABILITY) ---
+class PaletaZMap:
+    def __init__(self, w=1200, d=800, h_max=2000):
         self.w = w
         self.d = d
+        self.h_max = h_max
+        # Wirtualna siatka palety: każda komórka to kwadrat 10x10 mm
+        self.grid_w = w // 10
+        self.grid_d = d // 10
+        self.height_map = np.zeros((self.grid_w, self.grid_d), dtype=int)
+        self.items = []
+
+    def check_fit(self, gw, gd, h):
+        best_z = float('inf')
+        best_pos = None
+
+        for x in range(self.grid_w - gw + 1):
+            for y in range(self.grid_d - gd + 1):
+                # Patrzymy na wybrany prostokąt na palecie
+                subgrid = self.height_map[x:x+gw, y:y+gd]
+                # Zawsze opieramy się o najwyższy punkt pod spodem (GRAWITACJA)
+                max_z = np.max(subgrid)
+
+                if max_z + h <= self.h_max:
+                    # WYMÓG STABILNOŚCI: Przynajmniej 60% kartonu musi leżeć na płaskim, stabilnym gruncie (max_z)
+                    support_area = np.sum(subgrid == max_z)
+                    total_area = gw * gd
+                    
+                    if support_area / total_area >= 0.6:
+                        # Oceniamy pozycję: chcemy spakować jak najniżej, a w przypadku remisu dosunąć do rogu palety
+                        score = max_z * 10000 + (x**2 + y**2)
+                        if score < best_z:
+                            best_z = score
+                            best_pos = (x, y, max_z)
+        return best_pos
+
+    def pack_item(self, item):
+        L, W, H = item['L'], item['W'], item['H']
+        # Rezerwacja przestrzeni: zaokrąglamy ułamki w górę co 10mm (symuluje milimetrowe odstępy na karton)
+        gw_L = int(math.ceil(L / 10.0))
+        gd_W = int(math.ceil(W / 10.0))
+        
+        gw_W = int(math.ceil(W / 10.0))
+        gd_L = int(math.ceil(L / 10.0))
+
+        # Symulacja dwóch ułożeń na płasko (Zawsze H do góry!)
+        pos1 = self.check_fit(gw_L, gd_W, H)
+        pos2 = self.check_fit(gw_W, gd_L, H)
+
+        best_pos = None
+        best_dim = None
+        gw, gd = 0, 0
+
+        # Wybieramy ułożenie, które ląduje niżej w przestrzeni palety
+        if pos1 and pos2:
+            if pos1[2] <= pos2[2]:
+                best_pos, best_dim, gw, gd = pos1, (L, W, H), gw_L, gd_W
+            else:
+                best_pos, best_dim, gw, gd = pos2, (W, L, H), gw_W, gd_L
+        elif pos1:
+            best_pos, best_dim, gw, gd = pos1, (L, W, H), gw_L, gd_W
+        elif pos2:
+            best_pos, best_dim, gw, gd = pos2, (W, L, H), gw_W, gd_L
+
+        if best_pos:
+            x, y, z = best_pos
+            # Rzutujemy pudło z powrotem na siatkę - aktualizujemy wysokości
+            self.height_map[x:x+gw, y:y+gd] = z + H
+
+            self.items.append({
+                'pos': (x * 10, y * 10, z),
+                'dims': best_dim, # Rysujemy dokładny wymiar z bazy
+                'count': (1, 1, 1),
+                'name': item['nazwa'],
+                'color': item['color']
+            })
+            return True
+        return False
 
 def optymalizuj_palety_wielokrotne(koszyk, h_max):
     elementy = []
     odrzucone_lista = []
-    
+
     for wpis in koszyk:
-        # Odrzucamy kartony których nie da się w ogóle położyć na palecie
+        # Skrajne przypadki błędu ludzkiego (karton większy niż paleta)
         if wpis['H'] > h_max or max(wpis['L'], wpis['W']) > 1200 or min(wpis['L'], wpis['W']) > 800:
             odrzucone_lista.append(wpis)
             continue
-            
         for _ in range(wpis['ilosc']):
             elementy.append({
                 'nazwa': wpis['nazwa'], 'L': wpis['L'], 'W': wpis['W'], 'H': wpis['H'],
                 'color': generuj_kolor(wpis['nazwa'])
             })
 
-    # Sortujemy: Najpierw wg wysokości (by zdefiniować stabilne warstwy), następnie wg gabarytu podstawy
-    elementy.sort(key=lambda x: (x['H'], x['L'] * x['W']), reverse=True)
+    # KLUCZ SUKCESU: Sortujemy kartony od największego "poligona" (Dł x Szer).
+    # To zapewnia, że budujemy stabilną bazę a małe pudełka wypełniają dziury u góry!
+    elementy.sort(key=lambda x: (x['L'] * x['W'], x['H']), reverse=True)
 
     palety = []
-    aktualna_paleta = []
-    aktualne_Z = 0
+    aktualna_paleta = PaletaZMap(h_max=h_max)
+    niezapakowane_teraz = []
 
-    while elementy:
-        # Zaczynamy nową warstwę. Najwyższy karton ustala limit "sufitu" warstwy.
-        wysokosc_warstwy = elementy[0]['H']
+    for item in elementy:
+        if not aktualna_paleta.pack_item(item):
+            niezapakowane_teraz.append(item)
 
-        # Sprawdzamy czy nowa warstwa zmieści się na obecnej palecie
-        if aktualne_Z + wysokosc_warstwy > h_max:
-            if aktualna_paleta:
-                palety.append(aktualna_paleta)
-            aktualna_paleta = []
-            aktualne_Z = 0
-            continue
+    if aktualna_paleta.items:
+        palety.append(aktualna_paleta.items)
 
-        wolne_przestrzenie = [Prostokat(0, 0, 1200, 800)]
-        
-        warstwa_aktywna = True
-        while warstwa_aktywna:
-            warstwa_aktywna = False
-            
-            # Sortujemy przestrzenie, by dopasowywać pudła do najmniejszych dziur
-            wolne_przestrzenie.sort(key=lambda p: p.w * p.d)
-            
-            znaleziono_karton = False
-            for i, karton in enumerate(elementy):
-                for p_idx, przestrzen in enumerate(wolne_przestrzenie):
-                    umieszczono = False
-                    
-                    # Opcja 1: Ułożenie klasyczne
-                    if karton['L'] <= przestrzen.w and karton['W'] <= przestrzen.d:
-                        box_w, box_d = karton['L'], karton['W']
-                        umieszczono = True
-                    # Opcja 2: Ułożenie po obrocie o 90 stopni (na płasko)
-                    elif karton['W'] <= przestrzen.w and karton['L'] <= przestrzen.d:
-                        box_w, box_d = karton['W'], karton['L']
-                        umieszczono = True
-                        
-                    if umieszczono:
-                        p = wolne_przestrzenie.pop(p_idx)
-                        aktualna_paleta.append({
-                            'pos': (p.x, p.y, aktualne_Z),
-                            'dims': (box_w, box_d, karton['H']),
-                            'count': (1, 1, 1),
-                            'name': karton['nazwa'], 'color': karton['color']
-                        })
-                        
-                        elementy.pop(i) # Usunięcie postawionego kartonu z kolejki
-                        
-                        # Docinanie reszty wolnego miejsca na dwa mniejsze prostokąty (algorytm gilotynowy)
-                        rw1, rd1 = p.w - box_w, p.d
-                        rw2, rd2 = box_w, p.d - box_d
-                        rw3, rd3 = p.w, p.d - box_d
-                        rw4, rd4 = p.w - box_w, box_d
+    # Generowanie kolejnych palet aż do skutku
+    while niezapakowane_teraz:
+        aktualna_paleta = PaletaZMap(h_max=h_max)
+        elementy_do_spakowania = niezapakowane_teraz
+        niezapakowane_teraz = []
 
-                        if max(rw1*rd1, rw2*rd2) > max(rw3*rd3, rw4*rd4):
-                            if rw1 > 0 and rd1 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw1, rd1))
-                            if rw2 > 0 and rd2 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw2, rd2))
-                        else:
-                            if rw3 > 0 and rd3 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw3, rd3))
-                            if rw4 > 0 and rd4 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw4, rd4))
-                            
-                        znaleziono_karton = True
-                        warstwa_aktywna = True # Skoro znaleźliśmy miejsce, szukamy dalej w tej warstwie!
-                        break # Wychodzimy z pętli wolnych przestrzeni
+        for item in elementy_do_spakowania:
+            if not aktualna_paleta.pack_item(item):
+                niezapakowane_teraz.append(item)
                 
-                if znaleziono_karton:
-                    # Przerywamy skanowanie elementów i zaczynamy od nowa, by nie zaburzyć indeksów po usunięciu z listy
-                    break
-
-        # KRYTYCZNY PUNKT: Dopiero gdy pętla przeleci przez wszystkie elementy i NIC nie dopasuje,
-        # warstwa zostaje ostatecznie zamknięta. Podnosimy Z i robimy miejsce na nową warstwę.
-        aktualne_Z += wysokosc_warstwy
-
-    if aktualna_paleta:
-        palety.append(aktualna_paleta)
+        if len(aktualna_paleta.items) == 0:
+            # Odcięcie nieskończonej pętli - kartony nie do wciśnięcia
+            odrzucone_lista.extend(niezapakowane_teraz)
+            break
+            
+        palety.append(aktualna_paleta.items)
 
     return palety, odrzucone_lista
-
 
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
@@ -314,14 +336,15 @@ else:
     if not st.session_state['koszyk']:
         st.info("👈 Dodaj kartony do palety w panelu bocznym.")
     else:
-        palety, odrzucone = optymalizuj_palety_wielokrotne(st.session_state['koszyk'], h_max)
+        with st.spinner("📦 Składanie palet... Pracuje silnik fizyczny Z-Map (to może chwilę potrwać)"):
+            palety, odrzucone = optymalizuj_palety_wielokrotne(st.session_state['koszyk'], h_max)
         
         with c1:
             st.subheader("📋 Podsumowanie Zlecenia")
-            st.success(f"📦 Wygenerowano palet: **{len(palety)}**")
+            st.success(f"📦 Zbudowano stabilnych palet: **{len(palety)}**")
             
             if odrzucone:
-                st.error("⚠️ Poniższe pozycje są fizycznie niemożliwe do ułożenia na palecie:")
+                st.error("⚠️ Odrzucono (nie fizyczne do ułożenia):")
                 for err in odrzucone:
                     st.caption(f"- {err['nazwa']} ({err['L']}x{err['W']}x{err['H']})")
             
