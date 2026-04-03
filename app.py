@@ -60,11 +60,9 @@ KOLOR_BAZOWY = "#C19A6B"
 PALETA_KOLOROW = ["#C19A6B", "#D2B48C", "#E6C280", "#B8860B", "#CD853F", "#DEB887", "#F4A460", "#D2691E", "#A0522D"]
 
 def generuj_kolor(nazwa):
-    # Generuje stały odcień z palety na podstawie nazwy kartonu (dla wizualnego odróżnienia miksu)
     idx = int(hashlib.sha256(nazwa.encode('utf-8')).hexdigest(), 16) % len(PALETA_KOLOROW)
     return PALETA_KOLOROW[idx]
 
-# --- INICJALIZACJA KOSZYKA W SESJI ---
 if 'koszyk' not in st.session_state:
     st.session_state['koszyk'] = []
 
@@ -84,6 +82,7 @@ with st.sidebar:
             L = st.number_input("Dł zew (mm)", 10, value=100); W = st.number_input("Szer zew (mm)", 10, value=100); H = st.number_input("Wys zew (mm)", 10, value=100)
         else:
             p = PUDEŁKA_GROPAK[wybrane]; L, W, H = p["L"], p["W"], p["H"]
+            st.info(f"📏 Wymiary z bazy: **{L} x {W} x {H} mm**")
         
         kurier_name = st.selectbox("Przewoźnik:", list(KURIERZY.keys()))
         sztuk = st.number_input("Ilość sztuk:", 1, 200, 6)
@@ -93,22 +92,29 @@ with st.sidebar:
         h_max = st.number_input("Maks. wysokość towaru na palecie (mm):", 100, 3500, 2000)
         st.divider()
         
-        # Formularz dodawania do koszyka
-        with st.form("dodaj_towar"):
-            st.subheader("Dodaj asortyment")
-            wybrane_miks = st.selectbox("Rodzaj kartonu:", list(PUDEŁKA_GROPAK.keys()))
+        # Zmieniona logika UI - usunięto st.form, aby działało dynamicznie
+        st.subheader("Dodaj asortyment")
+        wybrane_miks = st.selectbox("Rodzaj kartonu:", list(PUDEŁKA_GROPAK.keys()))
+        
+        if wybrane_miks == "Własny wymiar...":
             col_l, col_w, col_h = st.columns(3)
-            with col_l: L_miks = st.number_input("Dł (mm)", 0, value=PUDEŁKA_GROPAK[wybrane_miks]["L"])
-            with col_w: W_miks = st.number_input("Sz (mm)", 0, value=PUDEŁKA_GROPAK[wybrane_miks]["W"])
-            with col_h: H_miks = st.number_input("Wy (mm)", 0, value=PUDEŁKA_GROPAK[wybrane_miks]["H"])
+            with col_l: L_miks = st.number_input("Dł (mm)", 1, value=100)
+            with col_w: W_miks = st.number_input("Sz (mm)", 1, value=100)
+            with col_h: H_miks = st.number_input("Wy (mm)", 1, value=100)
+        else:
+            L_miks = PUDEŁKA_GROPAK[wybrane_miks]["L"]
+            W_miks = PUDEŁKA_GROPAK[wybrane_miks]["W"]
+            H_miks = PUDEŁKA_GROPAK[wybrane_miks]["H"]
+            st.info(f"📏 Wymiary z bazy: **{L_miks} x {W_miks} x {H_miks} mm**")
             
-            sztuk_miks = st.number_input("Ilość sztuk:", 1, 1000, 10)
-            
-            if st.form_submit_button("➕ Dodaj do palety"):
-                nazwa = wybrane_miks if wybrane_miks != "Własny wymiar..." else f"Custom {L_miks}x{W_miks}x{H_miks}"
-                st.session_state['koszyk'].append({"nazwa": nazwa, "L": L_miks, "W": W_miks, "H": H_miks, "ilosc": sztuk_miks})
-                st.rerun()
+        sztuk_miks = st.number_input("Ilość sztuk:", 1, 1000, 10)
+        
+        if st.button("➕ Dodaj do palety", use_container_width=True):
+            nazwa = wybrane_miks if wybrane_miks != "Własny wymiar..." else f"Custom {L_miks}x{W_miks}x{H_miks}"
+            st.session_state['koszyk'].append({"nazwa": nazwa, "L": L_miks, "W": W_miks, "H": H_miks, "ilosc": sztuk_miks})
+            st.rerun()
 
+        st.divider()
         # Wyświetlanie zawartości koszyka
         if st.session_state['koszyk']:
             st.write("🛒 **Aktualny załadunek:**")
@@ -135,7 +141,7 @@ def rysuj_layout(bloki, is_pallet=False):
         lx = [x, x+l, x+l, x, x, None, x, x+l, x+l, x, x, None, x, x, None, x+l, x+l, None, x+l, x+l, None, x, x]
         ly = [y, y, y+w, y+w, y, None, y, y, y+w, y+w, y, None, y, y, None, y, y, None, y+w, y+w, None, y+w, y+w]
         lz = [z, z, z, z, z, None, z+h, z+h, z+h, z+h, z+h, None, z, z+h, None, z, z+h, None, z, z+h, None, z, z+h]
-        fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=2), showlegend=False, hoverinfo='skip'))
+        fig.add_trace(go.Scatter3d(x=lx, y=ly, z=lz, mode='lines', line=dict(color='black', width=3), showlegend=False, hoverinfo='skip'))
 
     def dodaj_bryle(x, y, z, l, w, h, kolor, border=True):
         dodaj_sciane([x, x+l, x+l, x, x], [y, y, y+w, y+w, y], [z+h, z+h, z+h, z+h, z+h], kolor, 2)
@@ -194,12 +200,15 @@ def optymalizuj_paczke(n, L, W, H, k_name):
 
 def optymalizuj_palete_miks(koszyk, h_max):
     packer = Packer()
-    # Ignorujemy wagę fizyczną (999999 kg)
     packer.add_bin(Bin('Paleta EURO', 1200, 800, h_max, 999999.0))
 
-    for item in koszyk:
+    # KLUCZOWA ZMIANA: Sortowanie koszyka przed dodaniem do pakera. 
+    # Wymusza na algorytmie zajmowanie się najpierw kartonami o największej powierzchni podstawy,
+    # co minimalizuje "wiszące" mniejsze paczki i redukuje luki przestrzenne.
+    posortowany_koszyk = sorted(koszyk, key=lambda k: (k['L'] * k['W'], k['H']), reverse=True)
+
+    for item in posortowany_koszyk:
         for i in range(item['ilosc']):
-            # Symboliczna waga 0.1
             packer.add_item(Item(item['nazwa'], item['L'], item['W'], item['H'], 0.1))
 
     packer.pack()
@@ -250,7 +259,6 @@ else:
             
             st.divider()
             st.write("**Legenda ułożenia:**")
-            # Unikalne nazwy dla legendy
             unikalne_pudelka = {b['name']: b['color'] for b in layout}
             for nazwa, kolor in unikalne_pudelka.items():
                 st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:5px;"><div style="width:15px; height:15px; background-color:{kolor}; border:1px solid #000; margin-right:10px;"></div>{nazwa}</div>', unsafe_allow_html=True)
