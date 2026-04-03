@@ -165,7 +165,7 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA: ALGORYTM WARSTWOWY + WIELOPALETOWY ---
+# --- 4. LOGIKA: POPRAWIONY ALGORYTM WARSTWOWY ---
 class Prostokat:
     def __init__(self, x, y, w, d):
         self.x = x
@@ -174,12 +174,11 @@ class Prostokat:
         self.d = d
 
 def optymalizuj_palety_wielokrotne(koszyk, h_max):
-    # KROK 1: Rozbijamy koszyk na pojedyncze kartony
     elementy = []
     odrzucone_lista = []
     
     for wpis in koszyk:
-        # Eliminujemy na starcie kartony, które są fizycznie niemożliwe do ułożenia
+        # Odrzucamy kartony których nie da się w ogóle położyć na palecie
         if wpis['H'] > h_max or max(wpis['L'], wpis['W']) > 1200 or min(wpis['L'], wpis['W']) > 800:
             odrzucone_lista.append(wpis)
             continue
@@ -190,76 +189,84 @@ def optymalizuj_palety_wielokrotne(koszyk, h_max):
                 'color': generuj_kolor(wpis['nazwa'])
             })
 
-    # Sortujemy: Najpierw najwyższe (by wyznaczać warstwy), potem o największej powierzchni bazy
+    # Sortujemy: Najpierw wg wysokości (by zdefiniować stabilne warstwy), następnie wg gabarytu podstawy
     elementy.sort(key=lambda x: (x['H'], x['L'] * x['W']), reverse=True)
 
     palety = []
     aktualna_paleta = []
     aktualne_Z = 0
 
-    # KROK 2: Pakowanie warstwowe (Layer-by-layer)
     while elementy:
-        # Zaczynamy nową warstwę. Jej wysokość dyktuje najwyższy pozostały karton.
+        # Zaczynamy nową warstwę. Najwyższy karton ustala limit "sufitu" warstwy.
         wysokosc_warstwy = elementy[0]['H']
 
         # Sprawdzamy czy nowa warstwa zmieści się na obecnej palecie
         if aktualne_Z + wysokosc_warstwy > h_max:
-            palety.append(aktualna_paleta)  # Zamykamy paletę
-            aktualna_paleta = []            # Bierzemy nową
+            if aktualna_paleta:
+                palety.append(aktualna_paleta)
+            aktualna_paleta = []
             aktualne_Z = 0
-            continue # Przechodzimy do kolejnej iteracji pętli z nową paletą na Z=0
+            continue
 
         wolne_przestrzenie = [Prostokat(0, 0, 1200, 800)]
-        do_usuniecia = []
-
-        # Próbujemy wcisnąć kartony w aktualną warstwę (Z pozostaje stałe)
-        for i, karton in enumerate(elementy):
-            wolne_przestrzenie.sort(key=lambda p: p.w * p.d) # Szukamy najciaśniejszego dopasowania
+        
+        warstwa_aktywna = True
+        while warstwa_aktywna:
+            warstwa_aktywna = False
             
-            umieszczono = False
-            for p_idx, przestrzen in enumerate(wolne_przestrzenie):
-                # Opcja 1: Normalnie
-                if karton['L'] <= przestrzen.w and karton['W'] <= przestrzen.d:
-                    box_w, box_d = karton['L'], karton['W']
-                    umieszczono = True
-                # Opcja 2: Obrót 90 stopni na płasko
-                elif karton['W'] <= przestrzen.w and karton['L'] <= przestrzen.d:
-                    box_w, box_d = karton['W'], karton['L']
-                    umieszczono = True
+            # Sortujemy przestrzenie, by dopasowywać pudła do najmniejszych dziur
+            wolne_przestrzenie.sort(key=lambda p: p.w * p.d)
+            
+            znaleziono_karton = False
+            for i, karton in enumerate(elementy):
+                for p_idx, przestrzen in enumerate(wolne_przestrzenie):
+                    umieszczono = False
+                    
+                    # Opcja 1: Ułożenie klasyczne
+                    if karton['L'] <= przestrzen.w and karton['W'] <= przestrzen.d:
+                        box_w, box_d = karton['L'], karton['W']
+                        umieszczono = True
+                    # Opcja 2: Ułożenie po obrocie o 90 stopni (na płasko)
+                    elif karton['W'] <= przestrzen.w and karton['L'] <= przestrzen.d:
+                        box_w, box_d = karton['W'], karton['L']
+                        umieszczono = True
+                        
+                    if umieszczono:
+                        p = wolne_przestrzenie.pop(p_idx)
+                        aktualna_paleta.append({
+                            'pos': (p.x, p.y, aktualne_Z),
+                            'dims': (box_w, box_d, karton['H']),
+                            'count': (1, 1, 1),
+                            'name': karton['nazwa'], 'color': karton['color']
+                        })
+                        
+                        elementy.pop(i) # Usunięcie postawionego kartonu z kolejki
+                        
+                        # Docinanie reszty wolnego miejsca na dwa mniejsze prostokąty (algorytm gilotynowy)
+                        rw1, rd1 = p.w - box_w, p.d
+                        rw2, rd2 = box_w, p.d - box_d
+                        rw3, rd3 = p.w, p.d - box_d
+                        rw4, rd4 = p.w - box_w, box_d
 
-                if umieszczono:
-                    p = wolne_przestrzenie.pop(p_idx)
-                    aktualna_paleta.append({
-                        'pos': (p.x, p.y, aktualne_Z),
-                        'dims': (box_w, box_d, karton['H']),
-                        'count': (1, 1, 1),
-                        'name': karton['nazwa'], 'color': karton['color']
-                    })
-                    do_usuniecia.append(i)
+                        if max(rw1*rd1, rw2*rd2) > max(rw3*rd3, rw4*rd4):
+                            if rw1 > 0 and rd1 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw1, rd1))
+                            if rw2 > 0 and rd2 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw2, rd2))
+                        else:
+                            if rw3 > 0 and rd3 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw3, rd3))
+                            if rw4 > 0 and rd4 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw4, rd4))
+                            
+                        znaleziono_karton = True
+                        warstwa_aktywna = True # Skoro znaleźliśmy miejsce, szukamy dalej w tej warstwie!
+                        break # Wychodzimy z pętli wolnych przestrzeni
+                
+                if znaleziono_karton:
+                    # Przerywamy skanowanie elementów i zaczynamy od nowa, by nie zaburzyć indeksów po usunięciu z listy
+                    break
 
-                    # Podział reszty przestrzeni na dwa mniejsze prostokąty (algorytm gilotynowy)
-                    rw1, rd1 = p.w - box_w, p.d
-                    rw2, rd2 = box_w, p.d - box_d
-                    rw3, rd3 = p.w, p.d - box_d
-                    rw4, rd4 = p.w - box_w, box_d
+        # KRYTYCZNY PUNKT: Dopiero gdy pętla przeleci przez wszystkie elementy i NIC nie dopasuje,
+        # warstwa zostaje ostatecznie zamknięta. Podnosimy Z i robimy miejsce na nową warstwę.
+        aktualne_Z += wysokosc_warstwy
 
-                    if max(rw1*rd1, rw2*rd2) > max(rw3*rd3, rw4*rd4):
-                        if rw1 > 0 and rd1 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw1, rd1))
-                        if rw2 > 0 and rd2 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw2, rd2))
-                    else:
-                        if rw3 > 0 and rd3 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw3, rd3))
-                        if rw4 > 0 and rd4 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw4, rd4))
-                    break # Przejdź do układania następnego kartonu
-
-        # Usuwamy spakowane kartony z listy do spakowania
-        for i in reversed(do_usuniecia):
-            elementy.pop(i)
-
-        # Jeśli w całej pętli nie udało się wcisnąć żadnego kartonu do tej warstwy, zamykamy warstwę
-        if not do_usuniecia:
-            aktualne_Z += wysokosc_warstwy
-
-    # Zapisujemy ostatnią, niedokończoną paletę
     if aktualna_paleta:
         palety.append(aktualna_paleta)
 
@@ -314,13 +321,12 @@ else:
             st.success(f"📦 Wygenerowano palet: **{len(palety)}**")
             
             if odrzucone:
-                st.error("⚠️ Poniższe pozycje są fizycznie niemożliwe do ułożenia (za duże):")
+                st.error("⚠️ Poniższe pozycje są fizycznie niemożliwe do ułożenia na palecie:")
                 for err in odrzucone:
                     st.caption(f"- {err['nazwa']} ({err['L']}x{err['W']}x{err['H']})")
             
             st.divider()
             st.write("**Legenda asortymentu:**")
-            # Unikalne przypisanie kolorów dla legendy
             unikalne = {}
             for p in palety:
                 for b in p: unikalne[b['name']] = b['color']
@@ -329,7 +335,6 @@ else:
                 
         with c2:
             if palety:
-                # Automatyczne generowanie ZAKŁADEK dla każdej palety!
                 zakladki = st.tabs([f"🚛 Paleta {i+1}" for i in range(len(palety))])
                 for i, paleta_layout in enumerate(palety):
                     with zakladki[i]:
