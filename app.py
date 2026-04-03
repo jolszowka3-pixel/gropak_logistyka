@@ -1,13 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
-import numpy as np
 import hashlib
-
-try:
-    from py3dbp import Packer, Bin, Item
-except ImportError:
-    st.error("🚨 Brak wymaganej biblioteki! Wpisz w terminalu: pip install py3dbp")
-    st.stop()
 
 # --- 1. KOMPLEKSOWA BAZA KURIERÓW ---
 KURIERZY = {
@@ -28,7 +21,7 @@ KURIERZY = {
     "Ambro Express": {"max_L": 3000, "max_G": 5000, "max_W": 50.0}
 }
 
-# --- 2. PEŁNA BAZA TWOICH KARTONÓW ---
+# --- 2. BAZA KARTONÓW ---
 PUDEŁKA_GROPAK = {
     "A11 (600x255x185)": {"L": 600, "W": 255, "H": 185},
     "B12 (600x300x235)": {"L": 600, "W": 300, "H": 235},
@@ -92,7 +85,6 @@ with st.sidebar:
         h_max = st.number_input("Maks. wysokość towaru na palecie (mm):", 100, 3500, 2000)
         st.divider()
         
-        # Zmieniona logika UI - usunięto st.form, aby działało dynamicznie
         st.subheader("Dodaj asortyment")
         wybrane_miks = st.selectbox("Rodzaj kartonu:", list(PUDEŁKA_GROPAK.keys()))
         
@@ -115,7 +107,6 @@ with st.sidebar:
             st.rerun()
 
         st.divider()
-        # Wyświetlanie zawartości koszyka
         if st.session_state['koszyk']:
             st.write("🛒 **Aktualny załadunek:**")
             for idx, item in enumerate(st.session_state['koszyk']):
@@ -175,7 +166,7 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA ---
+# --- 4. LOGIKA "JAK CZŁOWIEK" ---
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -198,36 +189,86 @@ def optymalizuj_paczke(n, L, W, H, k_name):
                         wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
     return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
-def optymalizuj_palete_miks(koszyk, h_max):
-    packer = Packer()
-    packer.add_bin(Bin('Paleta EURO', 1200, 800, h_max, 999999.0))
+class Przestrzen:
+    def __init__(self, x, y, dx, dy):
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
 
-    # KLUCZOWA ZMIANA: Sortowanie koszyka przed dodaniem do pakera. 
-    # Wymusza na algorytmie zajmowanie się najpierw kartonami o największej powierzchni podstawy,
-    # co minimalizuje "wiszące" mniejsze paczki i redukuje luki przestrzenne.
-    posortowany_koszyk = sorted(koszyk, key=lambda k: (k['L'] * k['W'], k['H']), reverse=True)
-
-    for item in posortowany_koszyk:
-        for i in range(item['ilosc']):
-            packer.add_item(Item(item['nazwa'], item['L'], item['W'], item['H'], 0.1))
-
-    packer.pack()
-    paleta = packer.bins[0]
-    
-    layout = []
-    for fitted_item in paleta.items:
-        x, y, z = [int(v) for v in fitted_item.position]
-        w, h, d = [int(v) for v in fitted_item.get_dimension()]
-        layout.append({
-            'pos': (x, y, z),
-            'dims': (w, h, d),
-            'count': (1, 1, 1),
-            'color': generuj_kolor(fitted_item.name),
-            'name': fitted_item.name
-        })
+def optymalizuj_palete_magazynier(koszyk, h_max):
+    # KROK 1: Dzielimy towar na solidne wieże (kolumny). 
+    # Żadnego leżenia na boku. H to zawsze wysokość.
+    wieze = []
+    for item in koszyk:
+        max_w_wiezy = h_max // item['H']
+        if max_w_wiezy == 0: continue # Karton wyższy niż paleta
         
-    zapakowane = len(paleta.items)
-    odrzucone = len(paleta.unfitted_items)
+        pozostalo = item['ilosc']
+        while pozostalo > 0:
+            sztuk_teraz = min(pozostalo, max_w_wiezy)
+            wieze.append({
+                'name': item['nazwa'],
+                'L': item['L'],
+                'W': item['W'],
+                'H': item['H'],
+                'count': sztuk_teraz,
+                'color': generuj_kolor(item['nazwa'])
+            })
+            pozostalo -= sztuk_teraz
+
+    # KROK 2: Sortujemy wieże od największej podstawy (najbardziej stabilne na dół/tył)
+    wieze.sort(key=lambda t: (t['L'] * t['W'], t['count'] * t['H']), reverse=True)
+
+    # KROK 3: Układamy wieże na palecie 1200x800 używając logiki "cięcia przestrzeni"
+    wolne_miejsca = [Przestrzen(0, 0, 1200, 800)]
+    layout = []
+    zapakowane = 0
+    odrzucone = 0
+
+    for w in wieze:
+        umieszczono = False
+        # Szukamy najmniejszej wolnej dziury, która pomieści naszą wieżę (optymalizacja)
+        wolne_miejsca.sort(key=lambda s: s.dx * s.dy)
+
+        for i, miejsce in enumerate(wolne_miejsca):
+            # Próba 1: Ułożenie standardowe (L wzdłuż 1200, W wzdłuż 800)
+            bx, by = w['L'], w['W']
+            if bx <= miejsce.dx and by <= miejsce.dy:
+                layout.append({
+                    'pos': (miejsce.x, miejsce.y, 0),
+                    'dims': (bx, by, w['H']),
+                    'count': (1, 1, w['count']),
+                    'name': w['name'], 'color': w['color']
+                })
+                umieszczono = True
+            
+            # Próba 2: Ułożenie obrócone o 90 stopni (L wzdłuż 800, W wzdłuż 1200)
+            elif w['W'] <= miejsce.dx and w['L'] <= miejsce.dy:
+                bx, by = w['W'], w['L']
+                layout.append({
+                    'pos': (miejsce.x, miejsce.y, 0),
+                    'dims': (bx, by, w['H']), # Zmieniona orientacja podstawy
+                    'count': (1, 1, w['count']),
+                    'name': w['name'], 'color': w['color']
+                })
+                umieszczono = True
+
+            if umieszczono:
+                zapakowane += w['count']
+                wolne_miejsca.pop(i)
+                # Dzielimy pozostałą przestrzeń na dwa mniejsze prostokąty
+                if miejsce.dx - bx > miejsce.dy - by:
+                    wolne_miejsca.append(Przestrzen(miejsce.x + bx, miejsce.y, miejsce.dx - bx, miejsce.dy))
+                    wolne_miejsca.append(Przestrzen(miejsce.x, miejsce.y + by, bx, miejsce.dy - by))
+                else:
+                    wolne_miejsca.append(Przestrzen(miejsce.x, miejsce.y + by, miejsce.dx, miejsce.dy - by))
+                    wolne_miejsca.append(Przestrzen(miejsce.x + bx, miejsce.y, miejsce.dx - bx, by))
+                break
+
+        if not umieszczono:
+            odrzucone += w['count']
+
     return layout, zapakowane, odrzucone
 
 # --- 5. INTERFEJS GŁÓWNY ---
@@ -249,16 +290,16 @@ else:
     if not st.session_state['koszyk']:
         st.info("👈 Dodaj kartony do palety w panelu bocznym.")
     else:
-        layout, spakowane, odrzucone = optymalizuj_palete_miks(st.session_state['koszyk'], h_max)
+        layout, spakowane, odrzucone = optymalizuj_palete_magazynier(st.session_state['koszyk'], h_max)
         
         with c1:
             st.subheader("📋 Status Palety")
             st.success(f"Ułożono sztuk: **{spakowane}**")
             if odrzucone > 0:
-                st.error(f"⚠️ Nie zmieściło się: **{odrzucone}** szt. (przekroczono limit wysokości {h_max} mm)")
+                st.error(f"⚠️ Nie zmieściło się: **{odrzucone}** szt. (brak miejsca w podstawie palety)")
             
             st.divider()
-            st.write("**Legenda ułożenia:**")
+            st.write("**Legenda asortymentu:**")
             unikalne_pudelka = {b['name']: b['color'] for b in layout}
             for nazwa, kolor in unikalne_pudelka.items():
                 st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:5px;"><div style="width:15px; height:15px; background-color:{kolor}; border:1px solid #000; margin-right:10px;"></div>{nazwa}</div>', unsafe_allow_html=True)
