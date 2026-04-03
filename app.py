@@ -49,7 +49,6 @@ PUDEŁKA_GROPAK = {
     "Własny wymiar...": {"L": 0, "W": 0, "H": 0}
 }
 
-KOLOR_BAZOWY = "#C19A6B"
 PALETA_KOLOROW = ["#C19A6B", "#D2B48C", "#E6C280", "#B8860B", "#CD853F", "#DEB887", "#F4A460", "#D2691E", "#A0522D"]
 
 def generuj_kolor(nazwa):
@@ -152,7 +151,7 @@ def rysuj_layout(bloki, is_pallet=False):
 
     for b in bloki:
         x0, y0, z0, (dl, sz, wy) = b['pos'][0], b['pos'][1], b['pos'][2], b['dims']
-        kolor = b.get('color', KOLOR_BAZOWY)
+        kolor = b.get('color', "#C19A6B")
         for ix in range(b['count'][0]):
             for iy in range(b['count'][1]):
                 for iz in range(b['count'][2]):
@@ -166,7 +165,107 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA "JAK CZŁOWIEK" ---
+# --- 4. LOGIKA: ALGORYTM WARSTWOWY + WIELOPALETOWY ---
+class Prostokat:
+    def __init__(self, x, y, w, d):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.d = d
+
+def optymalizuj_palety_wielokrotne(koszyk, h_max):
+    # KROK 1: Rozbijamy koszyk na pojedyncze kartony
+    elementy = []
+    odrzucone_lista = []
+    
+    for wpis in koszyk:
+        # Eliminujemy na starcie kartony, które są fizycznie niemożliwe do ułożenia
+        if wpis['H'] > h_max or max(wpis['L'], wpis['W']) > 1200 or min(wpis['L'], wpis['W']) > 800:
+            odrzucone_lista.append(wpis)
+            continue
+            
+        for _ in range(wpis['ilosc']):
+            elementy.append({
+                'nazwa': wpis['nazwa'], 'L': wpis['L'], 'W': wpis['W'], 'H': wpis['H'],
+                'color': generuj_kolor(wpis['nazwa'])
+            })
+
+    # Sortujemy: Najpierw najwyższe (by wyznaczać warstwy), potem o największej powierzchni bazy
+    elementy.sort(key=lambda x: (x['H'], x['L'] * x['W']), reverse=True)
+
+    palety = []
+    aktualna_paleta = []
+    aktualne_Z = 0
+
+    # KROK 2: Pakowanie warstwowe (Layer-by-layer)
+    while elementy:
+        # Zaczynamy nową warstwę. Jej wysokość dyktuje najwyższy pozostały karton.
+        wysokosc_warstwy = elementy[0]['H']
+
+        # Sprawdzamy czy nowa warstwa zmieści się na obecnej palecie
+        if aktualne_Z + wysokosc_warstwy > h_max:
+            palety.append(aktualna_paleta)  # Zamykamy paletę
+            aktualna_paleta = []            # Bierzemy nową
+            aktualne_Z = 0
+            continue # Przechodzimy do kolejnej iteracji pętli z nową paletą na Z=0
+
+        wolne_przestrzenie = [Prostokat(0, 0, 1200, 800)]
+        do_usuniecia = []
+
+        # Próbujemy wcisnąć kartony w aktualną warstwę (Z pozostaje stałe)
+        for i, karton in enumerate(elementy):
+            wolne_przestrzenie.sort(key=lambda p: p.w * p.d) # Szukamy najciaśniejszego dopasowania
+            
+            umieszczono = False
+            for p_idx, przestrzen in enumerate(wolne_przestrzenie):
+                # Opcja 1: Normalnie
+                if karton['L'] <= przestrzen.w and karton['W'] <= przestrzen.d:
+                    box_w, box_d = karton['L'], karton['W']
+                    umieszczono = True
+                # Opcja 2: Obrót 90 stopni na płasko
+                elif karton['W'] <= przestrzen.w and karton['L'] <= przestrzen.d:
+                    box_w, box_d = karton['W'], karton['L']
+                    umieszczono = True
+
+                if umieszczono:
+                    p = wolne_przestrzenie.pop(p_idx)
+                    aktualna_paleta.append({
+                        'pos': (p.x, p.y, aktualne_Z),
+                        'dims': (box_w, box_d, karton['H']),
+                        'count': (1, 1, 1),
+                        'name': karton['nazwa'], 'color': karton['color']
+                    })
+                    do_usuniecia.append(i)
+
+                    # Podział reszty przestrzeni na dwa mniejsze prostokąty (algorytm gilotynowy)
+                    rw1, rd1 = p.w - box_w, p.d
+                    rw2, rd2 = box_w, p.d - box_d
+                    rw3, rd3 = p.w, p.d - box_d
+                    rw4, rd4 = p.w - box_w, box_d
+
+                    if max(rw1*rd1, rw2*rd2) > max(rw3*rd3, rw4*rd4):
+                        if rw1 > 0 and rd1 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw1, rd1))
+                        if rw2 > 0 and rd2 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw2, rd2))
+                    else:
+                        if rw3 > 0 and rd3 > 0: wolne_przestrzenie.append(Prostokat(p.x, p.y + box_d, rw3, rd3))
+                        if rw4 > 0 and rd4 > 0: wolne_przestrzenie.append(Prostokat(p.x + box_w, p.y, rw4, rd4))
+                    break # Przejdź do układania następnego kartonu
+
+        # Usuwamy spakowane kartony z listy do spakowania
+        for i in reversed(do_usuniecia):
+            elementy.pop(i)
+
+        # Jeśli w całej pętli nie udało się wcisnąć żadnego kartonu do tej warstwy, zamykamy warstwę
+        if not do_usuniecia:
+            aktualne_Z += wysokosc_warstwy
+
+    # Zapisujemy ostatnią, niedokończoną paletę
+    if aktualna_paleta:
+        palety.append(aktualna_paleta)
+
+    return palety, odrzucone_lista
+
+
 def get_orientations(L, W, H):
     return list({(L, W, H), (L, H, W), (W, L, H), (W, H, L), (H, L, W), (H, W, L)})
 
@@ -189,88 +288,6 @@ def optymalizuj_paczke(n, L, W, H, k_name):
                         wyniki.append({"conf": (nx, ny, nz), "dims": (rl, rw, rh), "final": (fL, fW, fH), "score": score})
     return sorted(wyniki, key=lambda x: x['score'])[0] if wyniki else None
 
-class Przestrzen:
-    def __init__(self, x, y, dx, dy):
-        self.x = x
-        self.y = y
-        self.dx = dx
-        self.dy = dy
-
-def optymalizuj_palete_magazynier(koszyk, h_max):
-    # KROK 1: Dzielimy towar na solidne wieże (kolumny). 
-    # Żadnego leżenia na boku. H to zawsze wysokość.
-    wieze = []
-    for item in koszyk:
-        max_w_wiezy = h_max // item['H']
-        if max_w_wiezy == 0: continue # Karton wyższy niż paleta
-        
-        pozostalo = item['ilosc']
-        while pozostalo > 0:
-            sztuk_teraz = min(pozostalo, max_w_wiezy)
-            wieze.append({
-                'name': item['nazwa'],
-                'L': item['L'],
-                'W': item['W'],
-                'H': item['H'],
-                'count': sztuk_teraz,
-                'color': generuj_kolor(item['nazwa'])
-            })
-            pozostalo -= sztuk_teraz
-
-    # KROK 2: Sortujemy wieże od największej podstawy (najbardziej stabilne na dół/tył)
-    wieze.sort(key=lambda t: (t['L'] * t['W'], t['count'] * t['H']), reverse=True)
-
-    # KROK 3: Układamy wieże na palecie 1200x800 używając logiki "cięcia przestrzeni"
-    wolne_miejsca = [Przestrzen(0, 0, 1200, 800)]
-    layout = []
-    zapakowane = 0
-    odrzucone = 0
-
-    for w in wieze:
-        umieszczono = False
-        # Szukamy najmniejszej wolnej dziury, która pomieści naszą wieżę (optymalizacja)
-        wolne_miejsca.sort(key=lambda s: s.dx * s.dy)
-
-        for i, miejsce in enumerate(wolne_miejsca):
-            # Próba 1: Ułożenie standardowe (L wzdłuż 1200, W wzdłuż 800)
-            bx, by = w['L'], w['W']
-            if bx <= miejsce.dx and by <= miejsce.dy:
-                layout.append({
-                    'pos': (miejsce.x, miejsce.y, 0),
-                    'dims': (bx, by, w['H']),
-                    'count': (1, 1, w['count']),
-                    'name': w['name'], 'color': w['color']
-                })
-                umieszczono = True
-            
-            # Próba 2: Ułożenie obrócone o 90 stopni (L wzdłuż 800, W wzdłuż 1200)
-            elif w['W'] <= miejsce.dx and w['L'] <= miejsce.dy:
-                bx, by = w['W'], w['L']
-                layout.append({
-                    'pos': (miejsce.x, miejsce.y, 0),
-                    'dims': (bx, by, w['H']), # Zmieniona orientacja podstawy
-                    'count': (1, 1, w['count']),
-                    'name': w['name'], 'color': w['color']
-                })
-                umieszczono = True
-
-            if umieszczono:
-                zapakowane += w['count']
-                wolne_miejsca.pop(i)
-                # Dzielimy pozostałą przestrzeń na dwa mniejsze prostokąty
-                if miejsce.dx - bx > miejsce.dy - by:
-                    wolne_miejsca.append(Przestrzen(miejsce.x + bx, miejsce.y, miejsce.dx - bx, miejsce.dy))
-                    wolne_miejsca.append(Przestrzen(miejsce.x, miejsce.y + by, bx, miejsce.dy - by))
-                else:
-                    wolne_miejsca.append(Przestrzen(miejsce.x, miejsce.y + by, miejsce.dx, miejsce.dy - by))
-                    wolne_miejsca.append(Przestrzen(miejsce.x + bx, miejsce.y, miejsce.dx - bx, by))
-                break
-
-        if not umieszczono:
-            odrzucone += w['count']
-
-    return layout, zapakowane, odrzucone
-
 # --- 5. INTERFEJS GŁÓWNY ---
 c1, c2 = st.columns([1, 2])
 
@@ -290,19 +307,31 @@ else:
     if not st.session_state['koszyk']:
         st.info("👈 Dodaj kartony do palety w panelu bocznym.")
     else:
-        layout, spakowane, odrzucone = optymalizuj_palete_magazynier(st.session_state['koszyk'], h_max)
+        palety, odrzucone = optymalizuj_palety_wielokrotne(st.session_state['koszyk'], h_max)
         
         with c1:
-            st.subheader("📋 Status Palety")
-            st.success(f"Ułożono sztuk: **{spakowane}**")
-            if odrzucone > 0:
-                st.error(f"⚠️ Nie zmieściło się: **{odrzucone}** szt. (brak miejsca w podstawie palety)")
+            st.subheader("📋 Podsumowanie Zlecenia")
+            st.success(f"📦 Wygenerowano palet: **{len(palety)}**")
+            
+            if odrzucone:
+                st.error("⚠️ Poniższe pozycje są fizycznie niemożliwe do ułożenia (za duże):")
+                for err in odrzucone:
+                    st.caption(f"- {err['nazwa']} ({err['L']}x{err['W']}x{err['H']})")
             
             st.divider()
             st.write("**Legenda asortymentu:**")
-            unikalne_pudelka = {b['name']: b['color'] for b in layout}
-            for nazwa, kolor in unikalne_pudelka.items():
+            # Unikalne przypisanie kolorów dla legendy
+            unikalne = {}
+            for p in palety:
+                for b in p: unikalne[b['name']] = b['color']
+            for nazwa, kolor in unikalne.items():
                 st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:5px;"><div style="width:15px; height:15px; background-color:{kolor}; border:1px solid #000; margin-right:10px;"></div>{nazwa}</div>', unsafe_allow_html=True)
                 
-        with c2: 
-            st.plotly_chart(rysuj_layout(layout, is_pallet=True), use_container_width=True)
+        with c2:
+            if palety:
+                # Automatyczne generowanie ZAKŁADEK dla każdej palety!
+                zakladki = st.tabs([f"🚛 Paleta {i+1}" for i in range(len(palety))])
+                for i, paleta_layout in enumerate(palety):
+                    with zakladki[i]:
+                        st.write(f"**Zawartość: {len(paleta_layout)} sztuk** na tej palecie.")
+                        st.plotly_chart(rysuj_layout(paleta_layout, is_pallet=True), use_container_width=True)
