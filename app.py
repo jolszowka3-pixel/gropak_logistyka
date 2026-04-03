@@ -167,52 +167,53 @@ def rysuj_layout(bloki, is_pallet=False):
     )
     return fig
 
-# --- 4. LOGIKA: Z-MAP ENGINE (GRAVITY & STABILITY) ---
+# --- 4. LOGIKA: Z-MAP ENGINE V3 (PERFECT FIT & INTERLEAVING) ---
 class PaletaZMap:
     def __init__(self, w=1200, d=800, h_max=2000):
         self.w = w
         self.d = d
         self.h_max = h_max
-        # Wirtualna siatka palety: każda komórka to kwadrat 10x10 mm
-        self.grid_w = w // 10
-        self.grid_d = d // 10
+        # KROK SIATKI = 5 mm (Idealne dopasowanie dla bazy Gropak)
+        self.step = 5
+        self.grid_w = w // self.step
+        self.grid_d = d // self.step
         self.height_map = np.zeros((self.grid_w, self.grid_d), dtype=int)
         self.items = []
 
     def check_fit(self, gw, gd, h):
         best_z = float('inf')
+        best_score = float('inf')
         best_pos = None
 
         for x in range(self.grid_w - gw + 1):
             for y in range(self.grid_d - gd + 1):
-                # Patrzymy na wybrany prostokąt na palecie
+                # Pruning - omijamy miejsca, które od razu są wyższe niż nasz najlepszy wynik
+                if self.height_map[x, y] > best_z: 
+                    continue
+                
                 subgrid = self.height_map[x:x+gw, y:y+gd]
-                # Zawsze opieramy się o najwyższy punkt pod spodem (GRAWITACJA)
                 max_z = np.max(subgrid)
 
-                if max_z + h <= self.h_max:
-                    # WYMÓG STABILNOŚCI: Przynajmniej 60% kartonu musi leżeć na płaskim, stabilnym gruncie (max_z)
+                if max_z <= best_z and max_z + h <= self.h_max:
+                    # Łagodniejszy warunek stabilności: 45% oparcia pozwala na wchodzenie w luki
                     support_area = np.sum(subgrid == max_z)
-                    total_area = gw * gd
-                    
-                    if support_area / total_area >= 0.6:
-                        # Oceniamy pozycję: chcemy spakować jak najniżej, a w przypadku remisu dosunąć do rogu palety
-                        score = max_z * 10000 + (x**2 + y**2)
-                        if score < best_z:
-                            best_z = score
+                    if support_area >= 0.45 * (gw * gd):
+                        # Szukamy najniższego punktu, a w przypadku remisu dociskamy do rogu (x+y)
+                        score = max_z * 100000 + (x + y)
+                        if score < best_score:
+                            best_score = score
+                            best_z = max_z
                             best_pos = (x, y, max_z)
         return best_pos
 
     def pack_item(self, item):
         L, W, H = item['L'], item['W'], item['H']
-        # Rezerwacja przestrzeni: zaokrąglamy ułamki w górę co 10mm (symuluje milimetrowe odstępy na karton)
-        gw_L = int(math.ceil(L / 10.0))
-        gd_W = int(math.ceil(W / 10.0))
-        
-        gw_W = int(math.ceil(W / 10.0))
-        gd_L = int(math.ceil(L / 10.0))
+        gw_L = math.ceil(L / self.step)
+        gd_W = math.ceil(W / self.step)
+        gw_W = math.ceil(W / self.step)
+        gd_L = math.ceil(L / self.step)
 
-        # Symulacja dwóch ułożeń na płasko (Zawsze H do góry!)
+        # Test obu rotacji płaskich
         pos1 = self.check_fit(gw_L, gd_W, H)
         pos2 = self.check_fit(gw_W, gd_L, H)
 
@@ -220,7 +221,7 @@ class PaletaZMap:
         best_dim = None
         gw, gd = 0, 0
 
-        # Wybieramy ułożenie, które ląduje niżej w przestrzeni palety
+        # Wybór najbardziej kompaktowej opcji
         if pos1 and pos2:
             if pos1[2] <= pos2[2]:
                 best_pos, best_dim, gw, gd = pos1, (L, W, H), gw_L, gd_W
@@ -233,12 +234,11 @@ class PaletaZMap:
 
         if best_pos:
             x, y, z = best_pos
-            # Rzutujemy pudło z powrotem na siatkę - aktualizujemy wysokości
             self.height_map[x:x+gw, y:y+gd] = z + H
 
             self.items.append({
-                'pos': (x * 10, y * 10, z),
-                'dims': best_dim, # Rysujemy dokładny wymiar z bazy
+                'pos': (x * self.step, y * self.step, z),
+                'dims': best_dim, 
                 'count': (1, 1, 1),
                 'name': item['nazwa'],
                 'color': item['color']
@@ -247,36 +247,50 @@ class PaletaZMap:
         return False
 
 def optymalizuj_palety_wielokrotne(koszyk, h_max):
-    elementy = []
+    elementy_flat = []
     odrzucone_lista = []
 
     for wpis in koszyk:
-        # Skrajne przypadki błędu ludzkiego (karton większy niż paleta)
         if wpis['H'] > h_max or max(wpis['L'], wpis['W']) > 1200 or min(wpis['L'], wpis['W']) > 800:
             odrzucone_lista.append(wpis)
             continue
         for _ in range(wpis['ilosc']):
-            elementy.append({
+            elementy_flat.append({
                 'nazwa': wpis['nazwa'], 'L': wpis['L'], 'W': wpis['W'], 'H': wpis['H'],
                 'color': generuj_kolor(wpis['nazwa'])
             })
 
-    # KLUCZ SUKCESU: Sortujemy kartony od największego "poligona" (Dł x Szer).
-    # To zapewnia, że budujemy stabilną bazę a małe pudełka wypełniają dziury u góry!
-    elementy.sort(key=lambda x: (x['L'] * x['W'], x['H']), reverse=True)
+    # --- ALGORYTM MIESZANIA (INTERLEAVING) ---
+    # Rozbijamy monolityczne bloki. Jeśli mamy 50xA11 i 50xB12, ułożymy je: A11, B12, A11, B12...
+    groups = {}
+    for item in elementy_flat:
+        groups.setdefault(item['nazwa'], []).append(item)
+
+    # Sortujemy grupy by zacząć przeplatanie od największych gabarytów bazy (dla stabilności)
+    sorted_group_keys = sorted(groups.keys(), key=lambda k: groups[k][0]['L'] * groups[k][0]['W'], reverse=True)
+
+    elementy_mixed = []
+    while True:
+        dodano_cokolwiek = False
+        for k in sorted_group_keys:
+            if groups[k]:
+                elementy_mixed.append(groups[k].pop(0))
+                dodano_cokolwiek = True
+        if not dodano_cokolwiek:
+            break
+    # -----------------------------------------
 
     palety = []
     aktualna_paleta = PaletaZMap(h_max=h_max)
     niezapakowane_teraz = []
 
-    for item in elementy:
+    for item in elementy_mixed:
         if not aktualna_paleta.pack_item(item):
             niezapakowane_teraz.append(item)
 
     if aktualna_paleta.items:
         palety.append(aktualna_paleta.items)
 
-    # Generowanie kolejnych palet aż do skutku
     while niezapakowane_teraz:
         aktualna_paleta = PaletaZMap(h_max=h_max)
         elementy_do_spakowania = niezapakowane_teraz
@@ -287,7 +301,6 @@ def optymalizuj_palety_wielokrotne(koszyk, h_max):
                 niezapakowane_teraz.append(item)
                 
         if len(aktualna_paleta.items) == 0:
-            # Odcięcie nieskończonej pętli - kartony nie do wciśnięcia
             odrzucone_lista.extend(niezapakowane_teraz)
             break
             
@@ -336,7 +349,7 @@ else:
     if not st.session_state['koszyk']:
         st.info("👈 Dodaj kartony do palety w panelu bocznym.")
     else:
-        with st.spinner("📦 Składanie palet... Pracuje silnik fizyczny Z-Map (to może chwilę potrwać)"):
+        with st.spinner("📦 Optymalizacja zaawansowana w toku (Siła: Przeplatanie + Z-Map)..."):
             palety, odrzucone = optymalizuj_palety_wielokrotne(st.session_state['koszyk'], h_max)
         
         with c1:
